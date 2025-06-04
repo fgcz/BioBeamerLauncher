@@ -1,0 +1,35 @@
+# IDE and editor folders
+.vscode
+.idea
+
+# Python cache and compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+venv37/
+
+# Logs and output
+*.log
+log/
+log/*
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Test and temp files
+*.tmp
+*.bak
+
+# Distribution/build
+dist/
+build/
+*.egg-info/
+
+# Custom project scripts and batch files
+*.bat
+*.sh
