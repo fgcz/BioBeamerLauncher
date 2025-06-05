@@ -150,21 +150,38 @@ def fetch_xsd_file(xsd_file_path: str, logger=None) -> str:
 
 
 def parse_xml_and_select_host(xml_path: str, host_name: str, logger=None) -> dict:
-    """Parse the XML config and return the host entry as a dict, or None if not found."""
+    """Parse the XML config and return the host entry as a dict, or None if not found. Logs available host names if not found."""
     try:
         tree = ET.parse(xml_path)
         root = tree.getroot()
+        found_hosts = []
+        # Try direct children first
         for host in root.findall("host"):
+            found_hosts.append(host.get("name"))
             if host.get("name") == host_name:
                 if logger:
                     logger.info(f"Found host entry: {host_name}")
                 else:
                     print(f"Found host entry: {host_name}")
                 return host.attrib
+        # Fallback: search at any depth
+        for host in root.findall(".//host"):
+            if host.get("name") not in found_hosts:
+                found_hosts.append(host.get("name"))
+            if host.get("name") == host_name:
+                if logger:
+                    logger.info(f"Found host entry (nested): {host_name}")
+                else:
+                    print(f"Found host entry (nested): {host_name}")
+                return host.attrib
         if logger:
-            logger.error(f"Host '{host_name}' not found in XML config.")
+            logger.error(
+                f"Host '{host_name}' not found in XML config. Available hosts: {found_hosts}"
+            )
         else:
-            print(f"Host '{host_name}' not found in XML config.")
+            print(
+                f"Host '{host_name}' not found in XML config. Available hosts: {found_hosts}"
+            )
         return None
     except Exception as e:
         if logger:
