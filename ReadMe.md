@@ -1,0 +1,34 @@
+# BioBeamerLauncher
+
+BioBeamerLauncher is a cross-platform launcher for BioBeamer. It fetches a configuration file from a public git repository, determines the correct BioBeamer version to use, and runs BioBeamer with the specified configuration.
+
+## Features
+- Fetches config file (e.g., XML) from a public git repo
+- Reads config to determine BioBeamer version and parameters
+- Downloads or updates the specified BioBeamer version
+- Launches BioBeamer with the config
+
+## Directory Structure
+- `pyproject.toml` — Project metadata and dependencies
+- `launcher.py` — Main launcher script
+
+## Usage
+1. Clone this repository:
+   ```sh
+   git clone <this-repo-url>
+   cd BioBeamerLauncher
+   ```
+2. Run the launcher:
+   ```sh
+   python launcher.py
+   ```
+   (Or package as an executable for systems without Python.)
+
+## Workflow
+1. User runs the launcher
+2. Launcher fetches config from git
+3. Launcher ensures correct BioBeamer version is present
+4. Launcher runs BioBeamer
+
+---
+For more details, see the source code and comments in `launcher.py`.
