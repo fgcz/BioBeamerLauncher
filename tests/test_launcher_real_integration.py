@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import configparser
 import pytest
+import time
 
 # Official URLs
 XML_URL = (
@@ -17,6 +18,9 @@ XSD_URL = (
     "https://github.com/fgcz/BioBeamerConfig/raw/refs/heads/main/xml/BioBeamer2.xsd"
 )
 HOST_NAME = "testhost_real_integration"  # You may need to adjust this to a valid host in the XML
+
+SRC_PATH = Path("/tmp/tmpsykd339y")
+TGT_PATH = Path("/tmp/tmphz8a5xe8")
 
 
 @pytest.mark.real_integration
@@ -45,6 +49,13 @@ host_name = {HOST_NAME}
     # Set env for cache dir
     monkeypatch.setenv("BIOBEAMER_LAUNCHER_CACHE_DIR", str(tmp_path / "cache"))
 
+    # --- Setup: create temp file in source dir ---
+    SRC_PATH.mkdir(parents=True, exist_ok=True)
+    TGT_PATH.mkdir(parents=True, exist_ok=True)
+    test_file = SRC_PATH / "testfile.txt"
+    test_content = "integration test file content"
+    test_file.write_text(test_content)
+
     # Run launcher
     proc = subprocess.run(
         [sys.executable, str(launcher_dest / "launcher.py")],
@@ -55,7 +66,22 @@ host_name = {HOST_NAME}
     )
     print("STDOUT:\n", proc.stdout)
     print("STDERR:\n", proc.stderr)
-    # Assert that the process fails and the error message is present
-    assert proc.returncode != 0, "Launcher should fail when host is not found"
+
+    # --- Verify file was copied ---
+    copied_file = TGT_PATH / "testfile.txt"
+    assert copied_file.exists(), f"Expected file {copied_file} to exist after copy"
+    assert copied_file.read_text() == test_content, "Copied file content mismatch"
+
+    # --- Cleanup ---
+    try:
+        test_file.unlink()
+    except FileNotFoundError:
+        pass
+    try:
+        copied_file.unlink()
+    except FileNotFoundError:
+        pass
 
     # Optionally, check for available hosts in the error message
+    # Assert that the process fails and the error message is present
+    # assert proc.returncode != 0, "Launcher should fail when host is not found"
