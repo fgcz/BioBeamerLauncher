@@ -1,211 +1,175 @@
 import os
-import pytest
 import importlib.util
-from io import StringIO
-import sys
-import shutil
 import tempfile
+import shutil
 from pathlib import Path
 import logging
+import pytest
 
 
-# Test fixtures for shared config and XML/XSD content
-INI_MINIMAL = """[config]
-biobeamer_repo_url = https://example.com/repo.git
-config_file_path = configs/BioBeamerTest.xml
-xsd_file_path = configs/BioBeamer2.xsd
-host_name = testhost
-"""
-
-XML_MINIMAL = (
-    """<BioBeamerHosts><host name=\"testhost\" version=\"v1.0.0\"/></BioBeamerHosts>"""
-)
-
-XSD_MINIMAL = """<xs:schema attributeFormDefault=\"unqualified\" elementFormDefault=\"qualified\" xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">
-  <xs:element name=\"BioBeamerHosts\">
-    <xs:complexType>
-      <xs:sequence>
-        <xs:element name=\"host\" maxOccurs=\"unbounded\" minOccurs=\"0\">
-          <xs:complexType>
-            <xs:sequence/>
-            <xs:attribute type=\"xs:string\" name=\"name\" use=\"optional\"/>
-            <xs:attribute type=\"xs:string\" name=\"version\" use=\"optional\"/>
-          </xs:complexType>
-        </xs:element>
-      </xs:sequence>
-    </xs:complexType>
-  </xs:element>
-</xs:schema>"""
-
-
-def create_temp_launcher_env(
-    tmp_path,
-    ini_content,
-    xml_content=None,
-    xsd_content=None,
-    create_repo=False,
-    tag_name="v1.0.0",
-):
-    """
-    Helper to set up a temp launcher environment with config, optional XML/XSD, and optional git repo.
-    Returns a dict with paths and objects for use in tests.
-    """
-    config_dir = tmp_path / "src" / "config"
-    config_dir.mkdir(parents=True, exist_ok=True)
-    ini_path = config_dir / "launcher.ini"
-    ini_path.write_text(ini_content)
-
-    xml_path = xsd_path = repo_path = None
-    if xml_content:
-        xml_dir = tmp_path / "xml"
-        xml_dir.mkdir(exist_ok=True)
-        xml_path = xml_dir / "BioBeamerTest.xml"
-        xml_path.write_text(xml_content)
-    if xsd_content:
-        xsd_dir = tmp_path / "xml"
-        xsd_dir.mkdir(exist_ok=True)
-        xsd_path = xsd_dir / "BioBeamer2.xsd"
-        xsd_path.write_text(xsd_content)
-    if create_repo:
-        repo_dir = tmp_path / "biobeamer_repo"
-        repo_dir.mkdir(exist_ok=True)
-        repo_path = repo_dir / "BioBeamer"
-        repo_path.mkdir(exist_ok=True)
-        (repo_path / "README.md").write_text("# Dummy BioBeamer repo")
-        import subprocess
-
-        subprocess.run(["git", "init", "--initial-branch=main"], cwd=repo_path)
-        subprocess.run(
-            ["git", "config", "user.email", "test@example.com"], cwd=repo_path
+def import_launcher():
+    launcher_path = os.path.abspath(
+        os.path.join(
+            os.path.dirname(__file__), "..", "src", "biobeamer_launcher", "launcher.py"
         )
-        subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_path)
-        subprocess.run(["git", "add", "README.md"], cwd=repo_path)
-        subprocess.run(["git", "commit", "-m", "init"], cwd=repo_path)
-        subprocess.run(["git", "tag", tag_name], cwd=repo_path)
-    src_dir = tmp_path / "src" / "biobeamer_launcher"
-    src_dir.mkdir(parents=True, exist_ok=True)
-    orig_launcher = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "../src/biobeamer_launcher/launcher.py")
     )
-    shutil.copy(orig_launcher, src_dir / "launcher.py")
-    return {
-        "config_dir": config_dir,
-        "ini_path": ini_path,
-        "xml_path": xml_path,
-        "xsd_path": xsd_path,
-        "repo_path": repo_path,
-        "src_dir": src_dir,
+    spec = importlib.util.spec_from_file_location("launcher", launcher_path)
+    launcher = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(launcher)
+    return launcher
+
+
+def test_read_launcher_config(tmp_path):
+    launcher = import_launcher()
+    logger = launcher.get_logger("test_logger")
+    ini_content = """[config]\nbiobeamer_repo_url = https://example.com/repo.git\nconfig_file_path = /tmp/config.xml\nxsd_file_path = /tmp/config.xsd\nhost_name = testhost\n"""
+    ini_path = tmp_path / "launcher.ini"
+    ini_path.write_text(ini_content)
+    cfg = launcher.read_launcher_config(str(ini_path), logger=logger)
+    assert cfg["biobeamer_repo_url"] == "https://example.com/repo.git"
+    assert cfg["config_file_path"] == "/tmp/config.xml"
+    assert cfg["xsd_file_path"] == "/tmp/config.xsd"
+    assert cfg["host_name"] == "testhost"
+
+
+def test_print_launcher_config(caplog):
+    launcher = import_launcher()
+    logger = launcher.get_logger("test_logger")
+    cfg = {
+        "biobeamer_repo_url": "https://example.com/repo.git",
+        "config_file_path": "/tmp/config.xml",
+        "xsd_file_path": "/tmp/config.xsd",
+        "host_name": "testhost",
     }
+    with caplog.at_level("INFO", logger="test_logger"):
+        launcher.print_launcher_config(cfg, logger=logger)
+    out = caplog.text
+    assert "BioBeamerLauncher configuration:" in out
+    assert "BioBeamer repo URL: https://example.com/repo.git" in out
+    assert "Config file path: /tmp/config.xml" in out
+    assert "XSD file path: /tmp/config.xsd" in out
+    assert "Host name: testhost" in out
 
 
-@pytest.fixture
-def minimal_xml():
-    return XML_MINIMAL
+def test_fetch_xml_config_local(tmp_path, caplog):
+    launcher = import_launcher()
+    logger = launcher.get_logger("test_logger")
+    xml_path = tmp_path / "test.xml"
+    xml_path.write_text("<root/>")
+    with caplog.at_level("INFO", logger="test_logger"):
+        result = launcher.fetch_xml_config(str(xml_path), logger=logger)
+    assert result == str(xml_path)
+    assert "Using local XML config" in caplog.text
 
 
-@pytest.fixture
-def minimal_xsd():
-    return XSD_MINIMAL
+def test_fetch_xml_config_remote(monkeypatch, tmp_path, caplog):
+    launcher = import_launcher()
+    logger = launcher.get_logger("test_logger")
+
+    # Patch urllib.request.urlretrieve to simulate download
+    def fake_urlretrieve(url, filename):
+        Path(filename).write_text("<root/>")
+        return (filename, None)
+
+    monkeypatch.setattr(launcher.urllib.request, "urlretrieve", fake_urlretrieve)
+    url = "http://example.com/test.xml"
+    with caplog.at_level("INFO", logger="test_logger"):
+        result = launcher.fetch_xml_config(url, logger=logger)
+    assert os.path.exists(result)
+    assert Path(result).read_text() == "<root/>"
+    assert "Downloading XML config from http://example.com/test.xml" in caplog.text
+    os.remove(result)
 
 
-@pytest.fixture(autouse=True)
-def set_biobeamer_cache_env(tmp_path, monkeypatch):
-    cache_dir = str(tmp_path / "cache")
-    monkeypatch.setenv("BIOBEAMER_LAUNCHER_CACHE_DIR", cache_dir)
-    return cache_dir
+def test_get_cache_dir_env(monkeypatch, tmp_path):
+    launcher = import_launcher()
+    monkeypatch.setenv("BIOBEAMER_LAUNCHER_CACHE_DIR", str(tmp_path / "cache"))
+    assert launcher.get_cache_dir() == str(tmp_path / "cache")
 
 
-def test_launcher_ini_read(monkeypatch, tmp_path):
-    env = create_temp_launcher_env(tmp_path, INI_MINIMAL)
-    monkeypatch.chdir(tmp_path / "src")
-    spec = importlib.util.spec_from_file_location(
-        "launcher", str(env["src_dir"] / "launcher.py")
+def test_fetch_xsd_file_local(tmp_path, caplog):
+    launcher = import_launcher()
+    logger = launcher.get_logger("test_logger")
+    xsd_path = tmp_path / "test.xsd"
+    xsd_path.write_text("<xsd/>")
+    with caplog.at_level("INFO", logger="test_logger"):
+        result = launcher.fetch_xsd_file(str(xsd_path), logger=logger)
+    assert result == str(xsd_path)
+    assert "Using local XSD" in caplog.text
+
+
+def test_fetch_xsd_file_remote(monkeypatch, tmp_path, caplog):
+    launcher = import_launcher()
+    logger = launcher.get_logger("test_logger")
+
+    def fake_urlretrieve(url, filename):
+        Path(filename).write_text("<xsd/>")
+        return (filename, None)
+
+    monkeypatch.setattr(launcher.urllib.request, "urlretrieve", fake_urlretrieve)
+    url = "http://example.com/test.xsd"
+    with caplog.at_level("INFO", logger="test_logger"):
+        result = launcher.fetch_xsd_file(url, logger=logger)
+    assert os.path.exists(result)
+    assert Path(result).read_text() == "<xsd/>"
+    assert "Downloading XSD from http://example.com/test.xsd" in caplog.text
+    os.remove(result)
+
+
+def test_parse_xml_and_select_host(tmp_path, caplog):
+    launcher = import_launcher()
+    logger = launcher.get_logger("test_logger")
+    xml_path = tmp_path / "test.xml"
+    xml_path.write_text(
+        '<BioBeamerHosts><host name="foo" version="1.2.3"/></BioBeamerHosts>'
     )
-    launcher = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(launcher)
-    captured = StringIO()
-    sys.stdout = captured
-    launcher.main()
-    sys.stdout = sys.__stdout__
-    output = captured.getvalue()
-    assert "BioBeamer repo URL: https://example.com/repo.git" in output
-    assert "Config file path: configs/BioBeamerTest.xml" in output
-    assert "Host name: testhost" in output
-    shutil.rmtree(tmp_path)
+    with caplog.at_level("INFO", logger="test_logger"):
+        result = launcher.parse_xml_and_select_host(str(xml_path), "foo", logger=logger)
+    assert result["name"] == "foo"
+    assert result["version"] == "1.2.3"
+    assert "Found host entry: foo" in caplog.text
+    with caplog.at_level("ERROR", logger="test_logger"):
+        assert (
+            launcher.parse_xml_and_select_host(str(xml_path), "bar", logger=logger)
+            is None
+        )
+        assert "Host 'bar' not found in XML config." in caplog.text
 
 
-def test_launcher_logging_and_config(monkeypatch, tmp_path):
-    env = create_temp_launcher_env(tmp_path, INI_MINIMAL)
-    monkeypatch.chdir(tmp_path / "src")
-    spec = importlib.util.spec_from_file_location(
-        "launcher", str(env["src_dir"] / "launcher.py")
+def test_validate_xml_with_xsd(tmp_path, caplog):
+    launcher = import_launcher()
+    logger = launcher.get_logger("test_logger")
+    xml_path = tmp_path / "test.xml"
+    xsd_path = tmp_path / "test.xsd"
+    xml_path.write_text(
+        '<BioBeamerHosts><host name="foo" version="1.2.3"/></BioBeamerHosts>'
     )
-    launcher = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(launcher)
-    logger = launcher.setup_logging()
-    log_stream = StringIO()
-    for handler in logger.handlers:
-        logger.removeHandler(handler)
-    stream_handler = logging.StreamHandler(log_stream)
-    logger.addHandler(stream_handler)
-    sys_stdout = sys.stdout
-    sys.stdout = StringIO()
-    try:
-        launcher.main()
-        output = sys.stdout.getvalue()
-    finally:
-        sys.stdout = sys_stdout
-    logs = log_stream.getvalue()
-    assert "BioBeamer repo URL" in output
-    assert "config_file_path" in output or "Config file path" in output
-    assert "host_name" in output or "Host name" in output
-    assert (
-        "Could not fetch XML config file." in logs
-        or "Could not fetch XML config file." in output
+    xsd_path.write_text(
+        '<xs:schema attributeFormDefault="unqualified" elementFormDefault="qualified" xmlns:xs="http://www.w3.org/2001/XMLSchema">\n'
+        '<xs:element name="BioBeamerHosts">\n'
+        "  <xs:complexType>\n"
+        "    <xs:sequence>\n"
+        '      <xs:element name="host" maxOccurs="unbounded" minOccurs="0">\n'
+        "        <xs:complexType>\n"
+        "          <xs:sequence/>\n"
+        '          <xs:attribute type="xs:string" name="name" use="optional"/>\n'
+        '          <xs:attribute type="xs:string" name="version" use="optional"/>\n'
+        "        </xs:complexType>\n"
+        "      </xs:element>\n"
+        "    </xs:sequence>\n"
+        "  </xs:complexType>\n"
+        "</xs:element>\n"
+        "</xs:schema>"
     )
-    shutil.rmtree(tmp_path)
+    with caplog.at_level("INFO", logger="test_logger"):
+        assert launcher.validate_xml_with_xsd(
+            str(xml_path), str(xsd_path), logger=logger
+        )
+    assert "XML validation against XSD succeeded." in caplog.text
 
 
-def test_xml_validation_and_repo_checkout(
-    monkeypatch, tmp_path, minimal_xml, minimal_xsd
-):
-    ini_content = f"""[config]
-biobeamer_repo_url = file://{tmp_path}/biobeamer_repo/BioBeamer
-config_file_path = {tmp_path}/xml/BioBeamerTest.xml
-xsd_file_path = {tmp_path}/xml/BioBeamer2.xsd
-host_name = testhost
-"""
-    env = create_temp_launcher_env(
-        tmp_path,
-        ini_content,
-        xml_content=minimal_xml,
-        xsd_content=minimal_xsd,
-        create_repo=True,
-        tag_name="v1.0.0",
-    )
-    monkeypatch.chdir(tmp_path / "src")
-    spec = importlib.util.spec_from_file_location(
-        "launcher", str(env["src_dir"] / "launcher.py")
-    )
-    launcher = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(launcher)
-    logger = launcher.setup_logging()
-    log_stream = StringIO()
-    for handler in logger.handlers:
-        logger.removeHandler(handler)
-    stream_handler = logging.StreamHandler(log_stream)
-    logger.addHandler(stream_handler)
-    sys_stdout = sys.stdout
-    sys.stdout = StringIO()
-    try:
-        launcher.main()
-        output = sys.stdout.getvalue()
-    finally:
-        sys.stdout = sys_stdout
-    logs = log_stream.getvalue()
-    assert "XML validation succeeded." in logs
-    assert "BioBeamer repo ready at" in logs
-    assert "v1.0.0" in logs
-    assert "Selected host entry" in logs
-    assert "testhost" in logs
-    shutil.rmtree(tmp_path)
+def test_extract_biobeamer_version():
+    launcher = import_launcher()
+    host_entry = {"name": "foo", "version": "1.2.3"}
+    assert launcher.extract_biobeamer_version(host_entry) == "1.2.3"
+    assert launcher.extract_biobeamer_version({"name": "foo"}) is None
