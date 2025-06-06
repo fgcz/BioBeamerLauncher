@@ -32,6 +32,8 @@ else:
 @pytest.mark.integration
 def test_launcher_runs_biobeamer_and_copies_file(tmp_path, monkeypatch):
     # Setup directories
+    # Place config in <project-root>/config/launcher.ini, where project root is two levels above launcher.py
+    # This matches the default logic in get_xml_config_path()
     config_dir = tmp_path / "src" / "config"
     config_dir.mkdir(parents=True)
     xml_dir = tmp_path / "xml"
@@ -64,6 +66,7 @@ def test_launcher_runs_biobeamer_and_copies_file(tmp_path, monkeypatch):
     ini_path = config_dir / "launcher.ini"
     ini_path.write_text(ini)
     # Copy launcher.py into place
+    # Place launcher.py at tmp_path/src/biobeamer_launcher/launcher.py so project root is tmp_path
     src_launcher = (
         Path(__file__).parent.parent / "src" / "biobeamer_launcher" / "launcher.py"
     )
@@ -72,9 +75,9 @@ def test_launcher_runs_biobeamer_and_copies_file(tmp_path, monkeypatch):
     shutil.copy(src_launcher, launcher_dest / "launcher.py")
     # Set env for cache dir
     monkeypatch.setenv("BIOBEAMER_LAUNCHER_CACHE_DIR", str(tmp_path / "cache"))
-    # Run launcher with --config argument
+    # Run launcher with no --config argument, so it uses the default config path logic
     proc = subprocess.run(
-        [sys.executable, str(launcher_dest / "launcher.py"), "--config", str(ini_path)],
+        [sys.executable, str(launcher_dest / "launcher.py")],
         cwd=tmp_path / "src",
         capture_output=True,
         text=True,
@@ -85,14 +88,30 @@ def test_launcher_runs_biobeamer_and_copies_file(tmp_path, monkeypatch):
         # Print log file for debugging
         log_dir = tmp_path / "cache"
         log_file = log_dir / "biobeamer_testhost.log"
+        launcher_log_file = log_dir / "biobeamer_launcher.log"
+        # Print all files in log_dir for debugging
+        print(
+            "Log dir contents:",
+            list(log_dir.iterdir()) if log_dir.exists() else "(not found)",
+        )
         if log_file.exists():
             print("=== biobeamer_testhost.log ===")
             print(log_file.read_text())
         else:
             print("Log file not found:", log_file)
+        if launcher_log_file.exists():
+            print("=== biobeamer_launcher.log ===")
+            print(launcher_log_file.read_text())
+        else:
+            print("Launcher log file not found:", launcher_log_file)
+        print("STDOUT:\n", proc.stdout)
+        print("STDERR:\n", proc.stderr)
     assert output_txt.exists(), "output.txt should be created by dummy biobeamer2.py"
     assert output_txt.read_text() == "testdata"
     # Check logs for copy message
     log_dir = tmp_path / "cache"
     log_file = log_dir / "biobeamer_testhost.log"
     assert "Copied" in log_file.read_text()
+    # Add a comment to clarify why this works
+    # The launcher will look for config at <project-root>/config/launcher.ini, which is tmp_path/src/config/launcher.ini
+    # because launcher.py is at tmp_path/src/biobeamer_launcher/launcher.py
