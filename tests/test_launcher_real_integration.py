@@ -18,8 +18,29 @@ SRC_PATH = Path("/tmp/tmpsykd339y")
 TGT_PATH = Path("/tmp/tmphz8a5xe8")
 
 
+@pytest.fixture
+def remote_biobeamer_target_dir(request):
+    """Setup and cleanup only the remote BioBeamer target directory via SSH."""
+    remote_host = getattr(request, "param", None) or "130.60.81.105"
+    remote_user = "bfabriclocal"
+    remote_tgt = "/tmp/biobeamer_tgt"
+    setup_cmd = f"ssh {remote_user}@{remote_host} 'mkdir -p {remote_tgt} && chmod 777 {remote_tgt}'"
+    subprocess.run(setup_cmd, shell=True, check=True)
+    yield remote_tgt, remote_user, remote_host
+    cleanup_cmd = f"ssh {remote_user}@{remote_host} 'rm -rf {remote_tgt}/*'"
+    subprocess.run(cleanup_cmd, shell=True)
+
+
 def run_real_launcher_test(
-    tmp_path, monkeypatch, host_name, test_file_name, test_file_content
+    tmp_path,
+    monkeypatch,
+    host_name,
+    test_file_name,
+    test_file_content,
+    src_path=None,
+    tgt_path=None,
+    check_target=True,
+    remote_fixture=None,
 ):
     config_dir = tmp_path / "src" / "config"
     config_dir.mkdir(parents=True, exist_ok=True)
@@ -27,7 +48,11 @@ def run_real_launcher_test(
     log_dir = tmp_path / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     # Clean up SRC_PATH and TGT_PATH before test
-    for p in [SRC_PATH, TGT_PATH]:
+    if src_path is None:
+        src_path = SRC_PATH
+    if tgt_path is None:
+        tgt_path = TGT_PATH
+    for p in [src_path, tgt_path]:
         if p.exists() and p.is_dir():
             for f in p.iterdir():
                 if f.is_file():
@@ -50,9 +75,10 @@ log_dir = {log_dir}
     launcher_dest.mkdir(parents=True, exist_ok=True)
     shutil.copy(src_launcher, launcher_dest / "launcher.py")
     monkeypatch.setenv("BIOBEAMER_LAUNCHER_CACHE_DIR", str(tmp_path / "cache"))
-    SRC_PATH.mkdir(parents=True, exist_ok=True)
-    TGT_PATH.mkdir(parents=True, exist_ok=True)
-    test_file = SRC_PATH / test_file_name
+    src_path.mkdir(parents=True, exist_ok=True)
+    if check_target:
+        tgt_path.mkdir(parents=True, exist_ok=True)
+    test_file = src_path / test_file_name
     test_file.write_text(test_file_content)
     proc = subprocess.run(
         [sys.executable, str(launcher_dest / "launcher.py")],
@@ -63,18 +89,48 @@ log_dir = {log_dir}
     )
     print("STDOUT:\n", proc.stdout)
     print("STDERR:\n", proc.stderr)
-    assert proc.returncode == 0, f"BioBeamer exited with code {proc.returncode}"
-    copied_file = TGT_PATH / test_file_name
-    assert copied_file.exists(), f"Expected file {copied_file} to exist after copy"
-    assert copied_file.read_text() == test_file_content, "Copied file content mismatch"
+    if proc.returncode != 0:
+        print("About to raise RuntimeError due to non-zero exit code")
+        raise RuntimeError(
+            f"BioBeamer exited with code {proc.returncode}\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}"
+        )
+    print("This should never print after raise!")
+    if check_target:
+        # Check remote target file existence and content
+        if host_name == "testhost_real_remote_scp":
+            remote_tgt, remote_user, remote_host = (
+                remote_fixture
+                if remote_fixture
+                else ("/tmp/biobeamer_tgt", "bfabriclocal", "130.60.81.105")
+            )
+            remote_file = f"{remote_tgt}/{test_file_name}"
+            check_cmd = f"ssh {remote_user}@{remote_host} 'test -f {remote_file} && cat {remote_file}'"
+            result = subprocess.run(
+                check_cmd, shell=True, capture_output=True, text=True
+            )
+            assert (
+                result.returncode == 0
+            ), f"Expected remote file {remote_file} to exist after copy"
+            assert (
+                result.stdout.strip() == test_file_content
+            ), "Remote copied file content mismatch"
+        else:
+            copied_file = tgt_path / test_file_name
+            assert (
+                copied_file.exists()
+            ), f"Expected file {copied_file} to exist after copy"
+            assert (
+                copied_file.read_text() == test_file_content
+            ), "Copied file content mismatch"
     try:
         test_file.unlink()
     except FileNotFoundError:
         pass
-    try:
-        copied_file.unlink()
-    except FileNotFoundError:
-        pass
+    if check_target and not (host_name == "testhost_real_remote_scp"):
+        try:
+            copied_file.unlink()
+        except FileNotFoundError:
+            pass
 
 
 def is_tool_available(tool_name):
@@ -108,4 +164,21 @@ def test_launcher_with_real_sources_robocopy(tmp_path, monkeypatch):
         host_name="testhost_real_integration_robocopy",
         test_file_name="testfile_robocopy.txt",
         test_file_content="integration test file content robocopy",
+    )
+
+
+@pytest.mark.real_integration
+@pytest.mark.skipif(not is_tool_available("scp"), reason="scp not available on system")
+def test_launcher_with_real_remote_scp(
+    tmp_path, monkeypatch, remote_biobeamer_target_dir
+):
+    run_real_launcher_test(
+        tmp_path,
+        monkeypatch,
+        host_name="testhost_real_remote_scp",
+        test_file_name="testfile_remote.txt",
+        test_file_content="integration test file content remote scp",
+        src_path=Path("/tmp/biobeamer_src"),
+        tgt_path=None,
+        check_target=True,
     )
