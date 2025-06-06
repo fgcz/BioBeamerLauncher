@@ -188,7 +188,8 @@ def test_launcher_with_real_remote_scp(
         host_name="testhost_real_remote_scp",
         test_file_name="testfile_remote.txt",
         test_file_content="integration test file content remote scp",
-        src_path=Path("/tmp/biobeamer_src"),
+        # Use a local temp dir for the source, matching the XML config
+        src_path=tmp_path / "biobeamer_src",
         tgt_path=None,
         check_target=True,
         remote_fixture=remote_biobeamer_target_dir,
