@@ -11,6 +11,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 import lxml.etree as LET
 import logging
+import argparse
 
 
 def get_logger(name="biobeamer_launcher", level=logging.INFO):
@@ -25,7 +26,15 @@ def get_logger(name="biobeamer_launcher", level=logging.INFO):
 
 
 def get_xml_config_path() -> str:
-    """Return the absolute path to the launcher.ini config file (renamed for clarity)."""
+    """Return the absolute path to the launcher.ini config file, allowing override by env or CLI."""
+    # 1. Check CLI arg (set in main)
+    if hasattr(sys, "_launcher_config_override") and sys._launcher_config_override:
+        return sys._launcher_config_override
+    # 2. Check env var
+    env_path = os.environ.get("BIOBEAMER_LAUNCHER_CONFIG")
+    if env_path:
+        return env_path
+    # 3. Default
     return os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
         "config",
@@ -290,6 +299,11 @@ def setup_logging(log_dir=None):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", help="Path to launcher.ini config file")
+    args, unknown = parser.parse_known_args()
+    if args.config:
+        sys._launcher_config_override = args.config
     xml_config_path = get_xml_config_path()
     # Read config first to get log_dir
     cfg = read_launcher_config(xml_config_path)

@@ -72,9 +72,9 @@ def test_launcher_runs_biobeamer_and_copies_file(tmp_path, monkeypatch):
     shutil.copy(src_launcher, launcher_dest / "launcher.py")
     # Set env for cache dir
     monkeypatch.setenv("BIOBEAMER_LAUNCHER_CACHE_DIR", str(tmp_path / "cache"))
-    # Run launcher
+    # Run launcher with --config argument
     proc = subprocess.run(
-        [sys.executable, str(launcher_dest / "launcher.py")],
+        [sys.executable, str(launcher_dest / "launcher.py"), "--config", str(ini_path)],
         cwd=tmp_path / "src",
         capture_output=True,
         text=True,
