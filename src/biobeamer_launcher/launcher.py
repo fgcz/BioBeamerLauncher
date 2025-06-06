@@ -73,30 +73,68 @@ def print_launcher_config(cfg: dict, logger=None):
 
 
 def fetch_xml_config(xml_file_path: str, logger=None) -> str:
-    """Fetch the XML config file from a local path or URL. Returns the local file path."""
+    """Fetch the XML config file from a local path or URL. Returns the local file path. Caches remote XML in cache dir."""
+    cache_dir = get_cache_dir()
+    os.makedirs(cache_dir, exist_ok=True)
+    cache_xml_path = os.path.join(cache_dir, "BioBeamerConfig.xml")
     if xml_file_path.startswith(("http://", "https://", "ftp://")):
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".xml") as tmp:
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".xml") as tmp:
+                if logger:
+                    logger.info(f"Downloading XML config from {xml_file_path}...")
+                else:
+                    print(f"Downloading XML config from {xml_file_path}...")
+                urllib.request.urlretrieve(xml_file_path, tmp.name)
+                if logger:
+                    logger.info(f"Downloaded XML config to {tmp.name}")
+                else:
+                    print(f"Downloaded XML config to {tmp.name}")
+                # Save a persistent copy in the cache
+                shutil.copy(tmp.name, cache_xml_path)
+                if logger:
+                    logger.info(f"Cached XML config at {cache_xml_path}")
+                else:
+                    print(f"Cached XML config at {cache_xml_path}")
+                return tmp.name
+        except Exception as e:
             if logger:
-                logger.info(f"Downloading XML config from {xml_file_path}...")
+                logger.warning(
+                    f"Failed to fetch remote XML: {e}. Trying cached copy..."
+                )
             else:
-                print(f"Downloading XML config from {xml_file_path}...")
-            urllib.request.urlretrieve(xml_file_path, tmp.name)
-            if logger:
-                logger.info(f"Downloaded XML config to {tmp.name}")
+                print(f"Failed to fetch remote XML: {e}. Trying cached copy...")
+            if os.path.exists(cache_xml_path):
+                if logger:
+                    logger.info(f"Using cached XML config: {cache_xml_path}")
+                else:
+                    print(f"Using cached XML config: {cache_xml_path}")
+                return cache_xml_path
             else:
-                print(f"Downloaded XML config to {tmp.name}")
-            return tmp.name
+                if logger:
+                    logger.error("No cached XML config available.")
+                else:
+                    print("No cached XML config available.")
+                return None
     else:
         if not os.path.exists(xml_file_path):
             if logger:
                 logger.error(f"Config file not found: {xml_file_path}")
             else:
                 print(f"Config file not found: {xml_file_path}")
+            # Try cache as fallback
+            if os.path.exists(cache_xml_path):
+                if logger:
+                    logger.info(f"Using cached XML config: {cache_xml_path}")
+                else:
+                    print(f"Using cached XML config: {cache_xml_path}")
+                return cache_xml_path
             return None
         if logger:
             logger.info(f"Using local XML config: {xml_file_path}")
         else:
             print(f"Using local XML config: {xml_file_path}")
+        # Optionally update cache with local file
+        shutil.copy(xml_file_path, cache_xml_path)
         return xml_file_path
 
 
