@@ -181,4 +181,5 @@ def test_launcher_with_real_remote_scp(
         src_path=Path("/tmp/biobeamer_src"),
         tgt_path=None,
         check_target=True,
+        remote_fixture=remote_biobeamer_target_dir,
     )
