@@ -256,106 +256,152 @@ def fetch_or_update_biobeamer_repo(
     return repo_path
 
 
-def main() -> None:
+def parse_args():
+    """Parse command-line arguments."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", help="Path to launcher.ini config file")
     args, unknown = parser.parse_known_args()
+    return args
+
+
+def setup_logger(log_dir: str) -> logging.Logger:
+    """Set up and return a logger."""
+    return get_logger("biobeamer_launcher", logging.INFO, log_dir=log_dir)
+
+
+def load_config(args, logger: logging.Logger) -> Optional[dict]:
+    """Load the launcher config, possibly using CLI override."""
     if args.config:
         sys._launcher_config_override = args.config
     xml_config_path = get_xml_config_path()
-    # Set up logger first (use default log_dir for now)
-    default_log_dir = get_cache_dir()
-    logger = get_logger("biobeamer_launcher", logging.INFO, log_dir=default_log_dir)
-    # Read config with logger
     cfg = read_launcher_config(xml_config_path, logger=logger)
+    return cfg
+
+
+def fetch_and_log_xml_config(cfg, logger):
+    xml_path = fetch_xml_config(cfg["xml_file_path"], logger=logger)
+    if not xml_path:
+        logger.error("Could not fetch XML config file.")
+        return None
+    logger.info(f"XML config file path: {xml_path}")
+    return xml_path
+
+
+def fetch_and_log_xsd_file(cfg, logger):
+    xsd_path = fetch_xsd_file(cfg["xsd_file_path"], logger=logger)
+    if not xsd_path:
+        logger.error("Could not fetch XSD file.")
+        return None
+    logger.info(f"XSD file path: {xsd_path}")
+    return xsd_path
+
+
+def validate_xml_config(xml_path, xsd_path, logger):
+    if not validate_xml_with_xsd(xml_path, xsd_path, logger=logger):
+        logger.error("XML validation failed. Exiting.")
+        return False
+    logger.info("XML validation succeeded.")
+    return True
+
+
+def select_host_entry(xml_path, cfg, logger):
+    host_entry = parse_xml_and_select_host(xml_path, cfg["host_name"], logger=logger)
+    if not host_entry:
+        logger.error("Could not find host entry in XML.")
+        return None
+    logger.info(f"Selected host entry: {host_entry}")
+    return host_entry
+
+
+def extract_and_log_version(host_entry, logger):
+    version = extract_biobeamer_version(host_entry, logger=logger)
+    if version:
+        logger.info(f"BioBeamer version specified in host entry: {version}")
+    else:
+        logger.error("No BioBeamer version specified in host entry.")
+    return version
+
+
+def prepare_biobeamer_repo(cfg, version, logger):
+    cache_dir = get_cache_dir()
+    repo_path = fetch_or_update_biobeamer_repo(
+        cfg["biobeamer_repo_url"], version, cache_dir, logger=logger
+    )
+    if not repo_path:
+        logger.error("Failed to prepare BioBeamer repo.")
+        return None
+    return repo_path
+
+
+def run_biobeamer_process(repo_path, xml_path, xsd_path, cfg, log_dir, logger):
+    biobeamer_script = os.path.join(repo_path, "src", "biobeamer2.py")
+    if not os.path.exists(biobeamer_script):
+        logger.error(f"BioBeamer script not found: {biobeamer_script}")
+        return
+    biobeamer_log_file = os.path.join(log_dir, f"biobeamer_{cfg['host_name']}.log")
+    cmd = [
+        sys.executable,
+        biobeamer_script,
+        "--xml",
+        xml_path,
+        "--xsd",
+        xsd_path,
+        "--hostname",
+        cfg["host_name"],
+        "--log_dir",
+        log_dir,
+    ]
+    logger.info(f"Running BioBeamer: {' '.join(cmd)}")
+    try:
+        with open(biobeamer_log_file, "w") as logf:
+            result = subprocess.run(
+                cmd, stdout=logf, stderr=subprocess.STDOUT, text=True
+            )
+        logger.info(f"BioBeamer log written to: {biobeamer_log_file}")
+        if result.returncode != 0:
+            logger.error(f"BioBeamer exited with code {result.returncode}")
+        else:
+            logger.info("BioBeamer finished successfully.")
+    except Exception as e:
+        logger.exception(f"Failed to run BioBeamer: {e}")
+
+
+def run_launcher(cfg: dict, logger: logging.Logger, log_dir) -> None:
+    print_launcher_config(cfg, logger=logger)
+    xml_path = fetch_and_log_xml_config(cfg, logger)
+    if not xml_path:
+        return
+    xsd_path = fetch_and_log_xsd_file(cfg, logger)
+    if not xsd_path:
+        return
+    if not validate_xml_config(xml_path, xsd_path, logger):
+        return
+    host_entry = select_host_entry(xml_path, cfg, logger)
+    if not host_entry:
+        return
+    version = extract_and_log_version(host_entry, logger)
+    if not version:
+        return
+    repo_path = prepare_biobeamer_repo(cfg, version, logger)
+    if not repo_path:
+        return
+    run_biobeamer_process(repo_path, xml_path, xsd_path, cfg, log_dir, logger)
+
+
+def main() -> None:
+    """Main entry point for BioBeamerLauncher."""
+    args = parse_args()
+    default_log_dir = get_cache_dir()
+    logger = setup_logger(default_log_dir)
+    cfg = load_config(args, logger)
     log_dir = cfg["log_dir"] if cfg and cfg.get("log_dir") else get_cache_dir()
     # If log_dir from config is different, re-initialize logger
     if log_dir != default_log_dir:
-        logger = get_logger("biobeamer_launcher", logging.INFO, log_dir=log_dir)
-    try:
-        if not cfg:
-            logger.error("Could not read launcher config.")
-            return
-        print_launcher_config(cfg, logger=logger)
-
-        # Step 1: Fetch the XML config file (local or remote)
-        xml_path = fetch_xml_config(cfg["xml_file_path"], logger=logger)
-        if not xml_path:
-            logger.error("Could not fetch XML config file.")
-            return
-        logger.info(f"XML config file path: {xml_path}")
-
-        # Step 2: Fetch XSD file (local or remote)
-        xsd_path = fetch_xsd_file(cfg["xsd_file_path"], logger=logger)
-        if not xsd_path:
-            logger.error("Could not fetch XSD file.")
-            return
-        logger.info(f"XSD file path: {xsd_path}")
-
-        # Step 3: Validate XML against XSD
-        if not validate_xml_with_xsd(xml_path, xsd_path, logger=logger):
-            logger.error("XML validation failed. Exiting.")
-            return
-        logger.info("XML validation succeeded.")
-
-        # Step 4: Parse XML and select host
-        host_entry = parse_xml_and_select_host(
-            xml_path, cfg["host_name"], logger=logger
-        )
-        if not host_entry:
-            logger.error("Could not find host entry in XML.")
-            return
-        logger.info(f"Selected host entry: {host_entry}")
-
-        # Step 5: Extract BioBeamer version
-        version = extract_biobeamer_version(host_entry, logger=logger)
-        if version:
-            logger.info(f"BioBeamer version specified in host entry: {version}")
-        else:
-            logger.error("No BioBeamer version specified in host entry.")
-            return
-        # Step 6: Fetch or update BioBeamer repo and checkout version
-        cache_dir = get_cache_dir()
-        repo_path = fetch_or_update_biobeamer_repo(
-            cfg["biobeamer_repo_url"], version, cache_dir, logger=logger
-        )
-        if not repo_path:
-            logger.error("Failed to prepare BioBeamer repo.")
-            return
-        # Step 7: Run BioBeamer2 main script with appropriate arguments
-        biobeamer_script = os.path.join(repo_path, "src", "biobeamer2.py")
-        if not os.path.exists(biobeamer_script):
-            logger.error(f"BioBeamer script not found: {biobeamer_script}")
-            return
-        # Set up log file for subprocess in log_dir
-        biobeamer_log_file = os.path.join(log_dir, f"biobeamer_{cfg['host_name']}.log")
-        cmd = [
-            sys.executable,
-            biobeamer_script,
-            "--xml",
-            xml_path,
-            "--xsd",
-            xsd_path,
-            "--hostname",
-            cfg["host_name"],
-            "--log_dir",
-            log_dir,
-        ]
-        logger.info(f"Running BioBeamer: {' '.join(cmd)}")
-        try:
-            with open(biobeamer_log_file, "w") as logf:
-                result = subprocess.run(
-                    cmd, stdout=logf, stderr=subprocess.STDOUT, text=True
-                )
-            logger.info(f"BioBeamer log written to: {biobeamer_log_file}")
-            if result.returncode != 0:
-                logger.error(f"BioBeamer exited with code {result.returncode}")
-            else:
-                logger.info("BioBeamer finished successfully.")
-        except Exception as e:
-            logger.exception(f"Failed to run BioBeamer: {e}")
-    except Exception as e:
-        logger.exception(f"Unhandled exception: {e}")
+        logger = setup_logger(log_dir)
+    if not cfg:
+        logger.error("Could not read launcher config.")
+        return
+    run_launcher(cfg, logger, log_dir)
 
 
 if __name__ == "__main__":
