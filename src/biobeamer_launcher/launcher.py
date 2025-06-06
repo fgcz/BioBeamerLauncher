@@ -34,12 +34,9 @@ def get_xml_config_path() -> str:
     env_path = os.environ.get("BIOBEAMER_LAUNCHER_CONFIG")
     if env_path:
         return env_path
-    # 3. Default
-    return os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "config",
-        "launcher.ini",
-    )
+    # 3. Default: look in <project-root>/config/launcher.ini, where project root is two levels above this file
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(project_root, "config", "launcher.ini")
 
 
 def read_launcher_config(config_path: str, logger=None) -> Optional[dict]:
