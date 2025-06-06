@@ -20,12 +20,22 @@ TGT_PATH = Path("/tmp/tmphz8a5xe8")
 
 @pytest.fixture
 def remote_biobeamer_target_dir(request):
-    """Setup and cleanup only the remote BioBeamer target directory via SSH."""
+    """Setup and cleanup only the remote BioBeamer target directory via SSH, with error checking."""
     remote_host = getattr(request, "param", None) or "130.60.81.105"
     remote_user = "bfabriclocal"
     remote_tgt = "/tmp/biobeamer_tgt"
-    setup_cmd = f"ssh {remote_user}@{remote_host} 'mkdir -p {remote_tgt} && chmod 777 {remote_tgt}'"
-    subprocess.run(setup_cmd, shell=True, check=True)
+    # Run mkdir -p and check for errors
+    mkdir_cmd = f"ssh {remote_user}@{remote_host} 'mkdir -p {remote_tgt}'"
+    mkdir_proc = subprocess.run(mkdir_cmd, shell=True, capture_output=True, text=True)
+    if mkdir_proc.returncode != 0:
+        print(f"[remote_biobeamer_target_dir] mkdir failed: {mkdir_proc.stderr}")
+        raise RuntimeError(f"Failed to create remote directory: {remote_tgt}")
+    # Run chmod and check for errors
+    chmod_cmd = f"ssh {remote_user}@{remote_host} 'chmod 777 {remote_tgt}'"
+    chmod_proc = subprocess.run(chmod_cmd, shell=True, capture_output=True, text=True)
+    if chmod_proc.returncode != 0:
+        print(f"[remote_biobeamer_target_dir] chmod failed: {chmod_proc.stderr}")
+        raise RuntimeError(f"Failed to chmod remote directory: {remote_tgt}")
     yield remote_tgt, remote_user, remote_host
     cleanup_cmd = f"ssh {remote_user}@{remote_host} 'rm -rf {remote_tgt}/*'"
     subprocess.run(cleanup_cmd, shell=True)
