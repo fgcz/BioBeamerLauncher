@@ -13,6 +13,7 @@ BioBeamerLauncher is a cross-platform launcher for BioBeamer. It fetches a confi
 - **Internet access** is required to fetch configuration files and repositories.
 - **Python 3.8+** must be installed. You can install all Python dependencies using the provided `pyproject.toml`.
 - **robocopy** (Windows) and/or **scp/ssh** (Linux/Unix) must be installed and available in your system PATH for file transfer operations and integration tests.
+- If you want to use **scp** for remote transfers, you must set up passwordless SSH access (e.g., using SSH keys) to the remote host in advance. The target path in the XML config must be in the format `host:/path` (or `user@host:/path` if a username is needed).
 
 ## Installation
 To install the launcher and its dependencies, run:
