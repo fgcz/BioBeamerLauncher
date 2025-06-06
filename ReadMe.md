@@ -8,6 +8,43 @@ BioBeamerLauncher is a cross-platform launcher for BioBeamer. It fetches a confi
 - Downloads or updates the specified BioBeamer version
 - Launches BioBeamer with the config
 
+## Requirements
+- **Git** must be installed and available in your system PATH.
+- **Internet access** is required to fetch configuration files and repositories.
+- **Python 3.8+** must be installed. You can install all Python dependencies using the provided `pyproject.toml`.
+
+## Installation
+To install the launcher and its dependencies, run:
+
+```sh
+pip install .
+```
+
+To install with optional test dependencies (for running tests):
+
+```sh
+pip install .[test]
+```
+
+## Testing
+To run the test suite, make sure you have installed the test dependencies as above, then run:
+
+```sh
+pytest
+```
+
+Or, to run a specific test file:
+
+```sh
+pytest tests/test_launcher_real_integration.py
+```
+
+You can also use unittest if you have tests written for it:
+
+```sh
+python -m unittest discover
+```
+
 ## Directory Structure
 - `pyproject.toml` — Project metadata and dependencies
 - `launcher.py` — Main launcher script
