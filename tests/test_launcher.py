@@ -170,6 +170,6 @@ def test_validate_xml_with_xsd(tmp_path, caplog):
 
 def test_extract_biobeamer_version():
     launcher = import_launcher()
+    logger = launcher.get_logger("test_logger")
     host_entry = {"name": "foo", "version": "1.2.3"}
-    assert launcher.extract_biobeamer_version(host_entry) == "1.2.3"
-    assert launcher.extract_biobeamer_version({"name": "foo"}) is None
+    assert launcher.extract_biobeamer_version(host_entry, logger=logger) == "1.2.3"

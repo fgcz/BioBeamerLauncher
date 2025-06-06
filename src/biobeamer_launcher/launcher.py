@@ -1,20 +1,24 @@
+import argparse
 import configparser
+import logging
 import os
 import platform
 import shutil
 import subprocess
 import sys
 import tempfile
-from pathlib import Path
-from typing import Optional
 import urllib.request
 import xml.etree.ElementTree as ET
+from typing import Optional
+
 import lxml.etree as LET
-import logging
-import argparse
 
 
-def get_logger(name="biobeamer_launcher", level=logging.INFO):
+def get_logger(
+    name: str = "biobeamer_launcher",
+    level: int = logging.INFO,
+    log_dir: Optional[str] = None,
+) -> logging.Logger:
     logger = logging.getLogger(name)
     if not logger.handlers:
         logger.setLevel(level)
@@ -22,6 +26,12 @@ def get_logger(name="biobeamer_launcher", level=logging.INFO):
         ch = logging.StreamHandler()
         ch.setFormatter(formatter)
         logger.addHandler(ch)
+        if log_dir:
+            os.makedirs(log_dir, exist_ok=True)
+            log_file = os.path.join(log_dir, f"{name}.log")
+            fh = logging.FileHandler(log_file)
+            fh.setFormatter(formatter)
+            logger.addHandler(fh)
     return logger
 
 
@@ -39,26 +49,27 @@ def get_xml_config_path() -> str:
     return os.path.join(project_root, "config", "launcher.ini")
 
 
-def read_launcher_config(config_path: str, logger=None) -> Optional[dict]:
+def read_launcher_config(config_path: str, logger: logging.Logger) -> Optional[dict]:
     """Read the launcher.ini file and return config values as a dict, or None if not found."""
+    logger.debug(f"Attempting to read launcher config from: {config_path}")
     config = configparser.ConfigParser()
     if not os.path.exists(config_path):
-        if logger:
-            logger.error(f"Config file not found: {config_path}")
-        else:
-            print(f"Config file not found: {config_path}")
+        logger.error(f"Config file not found: {config_path}")
         return None
     config.read(config_path)
-    return {
+    logger.info(f"Successfully read config file: {config_path}")
+    config_dict = {
         "biobeamer_repo_url": config.get("config", "biobeamer_repo_url", fallback=None),
         "xml_file_path": config.get("config", "xml_file_path", fallback=None),
         "xsd_file_path": config.get("config", "xsd_file_path", fallback=None),
         "host_name": config.get("config", "host_name", fallback=None),
         "log_dir": config.get("config", "log_dir", fallback=None),
     }
+    logger.debug(f"Config values loaded: {config_dict}")
+    return config_dict
 
 
-def print_launcher_config(cfg: dict, logger=None):
+def print_launcher_config(cfg: dict, logger: logging.Logger) -> None:
     msg = (
         "BioBeamerLauncher configuration:\n"
         f"  BioBeamer repo URL: {cfg['biobeamer_repo_url']}\n"
@@ -66,76 +77,40 @@ def print_launcher_config(cfg: dict, logger=None):
         f"  XSD file path: {cfg['xsd_file_path']}\n"
         f"  Host name: {cfg['host_name']}"
     )
-    if logger:
-        logger.info(msg)
-    else:
-        print(msg)
+    logger.info(msg)
 
 
-def fetch_xml_config(xml_file_path: str, logger=None) -> str:
-    """Fetch the XML config file from a local path or URL. Returns the local file path. Caches remote XML in cache dir."""
+def fetch_xml_config(xml_file_path: str, logger: logging.Logger) -> Optional[str]:
+    """Fetch the XML config file from a local path or URL. Returns the local file path or None on failure. Caches remote XML in cache dir."""
     cache_dir = get_cache_dir()
     os.makedirs(cache_dir, exist_ok=True)
     cache_xml_path = os.path.join(cache_dir, "BioBeamerConfig.xml")
     if xml_file_path.startswith(("http://", "https://", "ftp://")):
         try:
             with tempfile.NamedTemporaryFile(delete=False, suffix=".xml") as tmp:
-                if logger:
-                    logger.info(f"Downloading XML config from {xml_file_path}...")
-                else:
-                    print(f"Downloading XML config from {xml_file_path}...")
+                logger.info(f"Downloading XML config from {xml_file_path}...")
                 urllib.request.urlretrieve(xml_file_path, tmp.name)
-                if logger:
-                    logger.info(f"Downloaded XML config to {tmp.name}")
-                else:
-                    print(f"Downloaded XML config to {tmp.name}")
+                logger.info(f"Downloaded XML config to {tmp.name}")
                 # Save a persistent copy in the cache
                 shutil.copy(tmp.name, cache_xml_path)
-                if logger:
-                    logger.info(f"Cached XML config at {cache_xml_path}")
-                else:
-                    print(f"Cached XML config at {cache_xml_path}")
+                logger.info(f"Cached XML config at {cache_xml_path}")
                 return tmp.name
         except Exception as e:
-            if logger:
-                logger.warning(
-                    f"Failed to fetch remote XML: {e}. Trying cached copy..."
-                )
-            else:
-                print(f"Failed to fetch remote XML: {e}. Trying cached copy...")
+            logger.warning(f"Failed to fetch remote XML: {e}. Trying cached copy...")
             if os.path.exists(cache_xml_path):
-                if logger:
-                    logger.info(f"Using cached XML config: {cache_xml_path}")
-                else:
-                    print(f"Using cached XML config: {cache_xml_path}")
+                logger.info(f"Using cached XML config: {cache_xml_path}")
                 return cache_xml_path
             else:
-                if logger:
-                    logger.error("No cached XML config available.")
-                else:
-                    print("No cached XML config available.")
+                logger.error("No cached XML config available.")
                 return None
     else:
-        if not os.path.exists(xml_file_path):
-            if logger:
-                logger.error(f"Config file not found: {xml_file_path}")
-            else:
-                print(f"Config file not found: {xml_file_path}")
-            # Try cache as fallback
-            if os.path.exists(cache_xml_path):
-                if logger:
-                    logger.info(f"Using cached XML config: {cache_xml_path}")
-                else:
-                    print(f"Using cached XML config: {cache_xml_path}")
-                return cache_xml_path
-            return None
-        if logger:
+        # Local file path
+        if os.path.exists(xml_file_path):
             logger.info(f"Using local XML config: {xml_file_path}")
+            return xml_file_path
         else:
-            print(f"Using local XML config: {xml_file_path}")
-        # Optionally update cache with local file
-        shutil.copy(xml_file_path, cache_xml_path)
-        return xml_file_path
+            logger.error(f"Local XML config not found: {xml_file_path}")
+            return None
 
 
 def get_cache_dir() -> str:
@@ -161,41 +136,28 @@ def get_cache_dir() -> str:
             return os.path.expanduser("~/.cache/biobeamer_launcher/BioBeamerConfig")
 
 
-def fetch_xsd_file(xsd_file_path: str, logger=None) -> str:
-    """Fetch the XSD file from a local path or URL. Returns the local file path."""
+def fetch_xsd_file(xsd_file_path: str, logger: logging.Logger) -> Optional[str]:
+    """Fetch the XSD file from a local path or URL. Returns the local file path or None on failure."""
     if not xsd_file_path:
-        if logger:
-            logger.error("No XSD file path provided in config.")
-        else:
-            print("No XSD file path provided in config.")
+        logger.error("No XSD file path provided in config.")
         return None
     if xsd_file_path.startswith(("http://", "https://", "ftp://")):
         with tempfile.NamedTemporaryFile(delete=False, suffix=".xsd") as tmp:
-            if logger:
-                logger.info(f"Downloading XSD from {xsd_file_path}...")
-            else:
-                print(f"Downloading XSD from {xsd_file_path}...")
+            logger.info(f"Downloading XSD from {xsd_file_path}...")
             urllib.request.urlretrieve(xsd_file_path, tmp.name)
-            if logger:
-                logger.info(f"Downloaded XSD to {tmp.name}")
-            else:
-                print(f"Downloaded XSD to {tmp.name}")
+            logger.info(f"Downloaded XSD to {tmp.name}")
             return tmp.name
     else:
         if not os.path.exists(xsd_file_path):
-            if logger:
-                logger.error(f"XSD file not found: {xsd_file_path}")
-            else:
-                print(f"XSD file not found: {xsd_file_path}")
+            logger.error(f"XSD file not found: {xsd_file_path}")
             return None
-        if logger:
-            logger.info(f"Using local XSD: {xsd_file_path}")
-        else:
-            print(f"Using local XSD: {xsd_file_path}")
+        logger.info(f"Using local XSD: {xsd_file_path}")
         return xsd_file_path
 
 
-def parse_xml_and_select_host(xml_path: str, host_name: str, logger=None) -> dict:
+def parse_xml_and_select_host(
+    xml_path: str, host_name: str, logger: logging.Logger
+) -> Optional[dict]:
     """Parse the XML config and return the host entry as a dict, or None if not found. Logs available host names if not found."""
     try:
         tree = ET.parse(xml_path)
@@ -205,39 +167,25 @@ def parse_xml_and_select_host(xml_path: str, host_name: str, logger=None) -> dic
         for host in root.findall("host"):
             found_hosts.append(host.get("name"))
             if host.get("name") == host_name:
-                if logger:
-                    logger.info(f"Found host entry: {host_name}")
-                else:
-                    print(f"Found host entry: {host_name}")
+                logger.info(f"Found host entry: {host_name}")
                 return host.attrib
         # Fallback: search at any depth
         for host in root.findall(".//host"):
             if host.get("name") not in found_hosts:
                 found_hosts.append(host.get("name"))
             if host.get("name") == host_name:
-                if logger:
-                    logger.info(f"Found host entry (nested): {host_name}")
-                else:
-                    print(f"Found host entry (nested): {host_name}")
+                logger.info(f"Found host entry (nested): {host_name}")
                 return host.attrib
-        if logger:
-            logger.error(
-                f"Host '{host_name}' not found in XML config. Available hosts: {found_hosts}"
-            )
-        else:
-            print(
-                f"Host '{host_name}' not found in XML config. Available hosts: {found_hosts}"
-            )
+        logger.error(
+            f"Host '{host_name}' not found in XML config. Available hosts: {found_hosts}"
+        )
         return None
     except Exception as e:
-        if logger:
-            logger.error(f"Error parsing XML: {e}")
-        else:
-            print(f"Error parsing XML: {e}")
+        logger.error(f"Error parsing XML: {e}")
         return None
 
 
-def validate_xml_with_xsd(xml_path: str, xsd_path: str, logger=None) -> bool:
+def validate_xml_with_xsd(xml_path: str, xsd_path: str, logger: logging.Logger) -> bool:
     """Validate the XML file against the XSD schema. Returns True if valid, False otherwise."""
     try:
         with open(xsd_path, "rb") as xsd_file:
@@ -246,109 +194,89 @@ def validate_xml_with_xsd(xml_path: str, xsd_path: str, logger=None) -> bool:
         with open(xml_path, "rb") as xml_file:
             xml_doc = LET.parse(xml_file)
         schema.assertValid(xml_doc)
-        if logger:
-            logger.info("XML validation against XSD succeeded.")
-        else:
-            print("XML validation against XSD succeeded.")
+        logger.info("XML validation against XSD succeeded.")
         return True
     except LET.DocumentInvalid as e:
-        if logger:
-            logger.error(f"XML validation error: {e}")
-        else:
-            print(f"XML validation error: {e}")
+        logger.error(f"XML validation error: {e}")
         return False
     except Exception as e:
-        if logger:
-            logger.error(f"Error during XML validation: {e}")
-        else:
-            print(f"Error during XML validation: {e}")
+        logger.error(f"Error during XML validation: {e}")
         return False
 
 
-def extract_biobeamer_version(host_entry: dict) -> str:
+def extract_biobeamer_version(
+    host_entry: dict, logger: logging.Logger
+) -> Optional[str]:
     """Extract the BioBeamer version from the host entry, if present."""
-    return host_entry.get("version")
+    version = host_entry.get("version")
+    if version:
+        logger.info(f"Extracted BioBeamer version: {version}")
+    else:
+        logger.error("No BioBeamer version found in host entry.")
+    return version
 
 
 def fetch_or_update_biobeamer_repo(
-    repo_url: str, version: str, cache_dir: str, logger: logging.Logger = None
+    repo_url: str, version: str, cache_dir: str, logger: logging.Logger
 ) -> Optional[str]:
     """Clone or update the BioBeamer repo and checkout the specified version (tag or branch). Returns the repo path or None on failure."""
-    log = logger.info if logger else print
-    log_err = logger.error if logger else print
     if not repo_url or not version:
-        log_err("BioBeamer repo URL or version not specified.")
+        logger.error("BioBeamer repo URL or version not specified.")
         return None
     repo_path = os.path.join(cache_dir, "BioBeamer")
     if not os.path.exists(repo_path):
-        log(f"Cloning BioBeamer repo from {repo_url} to {repo_path}...")
+        logger.info(f"Cloning BioBeamer repo from {repo_url} to {repo_path}...")
         result = subprocess.run(
             ["git", "clone", repo_url, repo_path], capture_output=True
         )
         if result.returncode != 0:
-            log_err(f"Failed to clone BioBeamer repo: {result.stderr.decode().strip()}")
+            logger.error(
+                f"Failed to clone BioBeamer repo: {result.stderr.decode().strip()}"
+            )
             return None
     else:
-        log(f"Updating existing BioBeamer repo at {repo_path}...")
+        logger.info(f"Updating existing BioBeamer repo at {repo_path}...")
         result = subprocess.run(
             ["git", "-C", repo_path, "fetch", "--all"], capture_output=True
         )
         if result.returncode != 0:
-            log_err(f"Failed to fetch updates: {result.stderr.decode().strip()}")
+            logger.error(f"Failed to fetch updates: {result.stderr.decode().strip()}")
             return None
     # Try to checkout the version as a tag or branch
-    log(f"Checking out BioBeamer version: {version}")
+    logger.info(f"Checking out BioBeamer version: {version}")
     result = subprocess.run(
         ["git", "-C", repo_path, "checkout", version], capture_output=True
     )
     if result.returncode != 0:
-        log_err(
+        logger.error(
             f"Failed to checkout version '{version}': {result.stderr.decode().strip()}"
         )
         return None
-    log(f"BioBeamer repo ready at: {repo_path} (version: {version})")
+    logger.info(f"BioBeamer repo ready at: {repo_path} (version: {version})")
     return repo_path
 
 
-def setup_logging(log_dir=None):
-    """Set up logging to both console and a file in the specified log_dir."""
-    if log_dir is None:
-        log_dir = get_cache_dir()
-    os.makedirs(log_dir, exist_ok=True)
-    log_file = os.path.join(log_dir, "biobeamer_launcher.log")
-    logger = logging.getLogger("biobeamer_launcher")
-    logger.setLevel(logging.INFO)
-    formatter = logging.Formatter("[%(asctime)s] %(levelname)s: %(message)s")
-    # Remove existing handlers to avoid duplicate logs
-    if logger.hasHandlers():
-        logger.handlers.clear()
-    # File handler
-    fh = logging.FileHandler(log_file)
-    fh.setFormatter(formatter)
-    logger.addHandler(fh)
-    # Console handler
-    ch = logging.StreamHandler()
-    ch.setFormatter(formatter)
-    logger.addHandler(ch)
-    return logger
-
-
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", help="Path to launcher.ini config file")
     args, unknown = parser.parse_known_args()
     if args.config:
         sys._launcher_config_override = args.config
     xml_config_path = get_xml_config_path()
-    # Read config first to get log_dir
-    cfg = read_launcher_config(xml_config_path)
+    # Set up logger first (use default log_dir for now)
+    default_log_dir = get_cache_dir()
+    logger = get_logger("biobeamer_launcher", logging.INFO, log_dir=default_log_dir)
+    # Read config with logger
+    cfg = read_launcher_config(xml_config_path, logger=logger)
     log_dir = cfg["log_dir"] if cfg and cfg.get("log_dir") else get_cache_dir()
-    logger = setup_logging(log_dir)
+    # If log_dir from config is different, re-initialize logger
+    if log_dir != default_log_dir:
+        logger = get_logger("biobeamer_launcher", logging.INFO, log_dir=log_dir)
     try:
         if not cfg:
             logger.error("Could not read launcher config.")
             return
-        print_launcher_config(cfg)
+        print_launcher_config(cfg, logger=logger)
 
         # Step 1: Fetch the XML config file (local or remote)
         xml_path = fetch_xml_config(cfg["xml_file_path"], logger=logger)
@@ -380,7 +308,7 @@ def main():
         logger.info(f"Selected host entry: {host_entry}")
 
         # Step 5: Extract BioBeamer version
-        version = extract_biobeamer_version(host_entry)
+        version = extract_biobeamer_version(host_entry, logger=logger)
         if version:
             logger.info(f"BioBeamer version specified in host entry: {version}")
         else:

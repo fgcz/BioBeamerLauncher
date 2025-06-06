@@ -21,15 +21,17 @@ def test_print_launcher_config_prints_expected(monkeypatch, tmp_path):
     spec = importlib.util.spec_from_file_location("launcher", launcher_path)
     launcher = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(launcher)
-    # Capture stdout
-    captured = StringIO()
-    sys_stdout = sys.stdout
-    sys.stdout = captured
-    try:
-        launcher.print_launcher_config(cfg)
-    finally:
-        sys.stdout = sys_stdout
-    output = captured.getvalue()
+    logger = launcher.get_logger("test_logger")
+    # Capture log output
+    import logging
+    from io import StringIO
+
+    log_stream = StringIO()
+    handler = logging.StreamHandler(log_stream)
+    logger.addHandler(handler)
+    launcher.print_launcher_config(cfg, logger=logger)
+    logger.removeHandler(handler)
+    output = log_stream.getvalue()
     assert "BioBeamerLauncher configuration:" in output
     assert "BioBeamer repo URL: https://example.com/repo.git" in output
     assert "Config file path: configs/BioBeamerTest.xml" in output
