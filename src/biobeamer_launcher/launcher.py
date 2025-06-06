@@ -337,7 +337,7 @@ def run_biobeamer_process(repo_path, xml_path, xsd_path, cfg, log_dir, logger):
     biobeamer_script = os.path.join(repo_path, "src", "biobeamer2.py")
     if not os.path.exists(biobeamer_script):
         logger.error(f"BioBeamer script not found: {biobeamer_script}")
-        return
+        return 10  # nonzero error code
     biobeamer_log_file = os.path.join(log_dir, f"biobeamer_{cfg['host_name']}.log")
     cmd = [
         sys.executable,
@@ -360,32 +360,35 @@ def run_biobeamer_process(repo_path, xml_path, xsd_path, cfg, log_dir, logger):
         logger.info(f"BioBeamer log written to: {biobeamer_log_file}")
         if result.returncode != 0:
             logger.error(f"BioBeamer exited with code {result.returncode}")
+            return result.returncode
         else:
             logger.info("BioBeamer finished successfully.")
+            return 0
     except Exception as e:
         logger.exception(f"Failed to run BioBeamer: {e}")
+        return 11  # nonzero error code
 
 
-def run_launcher(cfg: dict, logger: logging.Logger, log_dir) -> None:
+def run_launcher(cfg: dict, logger: logging.Logger, log_dir) -> int:
     print_launcher_config(cfg, logger=logger)
     xml_path = fetch_and_log_xml_config(cfg, logger)
     if not xml_path:
-        return
+        return 20
     xsd_path = fetch_and_log_xsd_file(cfg, logger)
     if not xsd_path:
-        return
+        return 21
     if not validate_xml_config(xml_path, xsd_path, logger):
-        return
+        return 22
     host_entry = select_host_entry(xml_path, cfg, logger)
     if not host_entry:
-        return
+        return 23
     version = extract_and_log_version(host_entry, logger)
     if not version:
-        return
+        return 24
     repo_path = prepare_biobeamer_repo(cfg, version, logger)
     if not repo_path:
-        return
-    run_biobeamer_process(repo_path, xml_path, xsd_path, cfg, log_dir, logger)
+        return 25
+    return run_biobeamer_process(repo_path, xml_path, xsd_path, cfg, log_dir, logger)
 
 
 def main() -> None:
@@ -400,8 +403,9 @@ def main() -> None:
         logger = setup_logger(log_dir)
     if not cfg:
         logger.error("Could not read launcher config.")
-        return
-    run_launcher(cfg, logger, log_dir)
+        sys.exit(30)
+    exit_code = run_launcher(cfg, logger, log_dir)
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":
