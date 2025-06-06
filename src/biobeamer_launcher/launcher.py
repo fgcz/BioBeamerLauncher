@@ -3,6 +3,7 @@ import os
 import platform
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Optional
@@ -44,9 +45,10 @@ def read_launcher_config(config_path: str, logger=None) -> Optional[dict]:
     config.read(config_path)
     return {
         "biobeamer_repo_url": config.get("config", "biobeamer_repo_url", fallback=None),
-        "config_file_path": config.get("config", "config_file_path", fallback=None),
+        "xml_file_path": config.get("config", "xml_file_path", fallback=None),
         "xsd_file_path": config.get("config", "xsd_file_path", fallback=None),
         "host_name": config.get("config", "host_name", fallback=None),
+        "log_dir": config.get("config", "log_dir", fallback=None),
     }
 
 
@@ -54,7 +56,7 @@ def print_launcher_config(cfg: dict, logger=None):
     msg = (
         "BioBeamerLauncher configuration:\n"
         f"  BioBeamer repo URL: {cfg['biobeamer_repo_url']}\n"
-        f"  Config file path: {cfg['config_file_path']}\n"
+        f"  Config file path: {cfg['xml_file_path']}\n"
         f"  XSD file path: {cfg['xsd_file_path']}\n"
         f"  Host name: {cfg['host_name']}"
     )
@@ -64,32 +66,32 @@ def print_launcher_config(cfg: dict, logger=None):
         print(msg)
 
 
-def fetch_xml_config(config_file_path: str, logger=None) -> str:
+def fetch_xml_config(xml_file_path: str, logger=None) -> str:
     """Fetch the XML config file from a local path or URL. Returns the local file path."""
-    if config_file_path.startswith(("http://", "https://", "ftp://")):
+    if xml_file_path.startswith(("http://", "https://", "ftp://")):
         with tempfile.NamedTemporaryFile(delete=False, suffix=".xml") as tmp:
             if logger:
-                logger.info(f"Downloading XML config from {config_file_path}...")
+                logger.info(f"Downloading XML config from {xml_file_path}...")
             else:
-                print(f"Downloading XML config from {config_file_path}...")
-            urllib.request.urlretrieve(config_file_path, tmp.name)
+                print(f"Downloading XML config from {xml_file_path}...")
+            urllib.request.urlretrieve(xml_file_path, tmp.name)
             if logger:
                 logger.info(f"Downloaded XML config to {tmp.name}")
             else:
                 print(f"Downloaded XML config to {tmp.name}")
             return tmp.name
     else:
-        if not os.path.exists(config_file_path):
+        if not os.path.exists(xml_file_path):
             if logger:
-                logger.error(f"Config file not found: {config_file_path}")
+                logger.error(f"Config file not found: {xml_file_path}")
             else:
-                print(f"Config file not found: {config_file_path}")
+                print(f"Config file not found: {xml_file_path}")
             return None
         if logger:
-            logger.info(f"Using local XML config: {config_file_path}")
+            logger.info(f"Using local XML config: {xml_file_path}")
         else:
-            print(f"Using local XML config: {config_file_path}")
-        return config_file_path
+            print(f"Using local XML config: {xml_file_path}")
+        return xml_file_path
 
 
 def get_cache_dir() -> str:
@@ -264,14 +266,18 @@ def fetch_or_update_biobeamer_repo(
     return repo_path
 
 
-def setup_logging():
-    """Set up logging to both console and a file in the cache dir."""
-    cache_dir = get_cache_dir()
-    os.makedirs(cache_dir, exist_ok=True)
-    log_file = os.path.join(cache_dir, "biobeamer_launcher.log")
+def setup_logging(log_dir=None):
+    """Set up logging to both console and a file in the specified log_dir."""
+    if log_dir is None:
+        log_dir = get_cache_dir()
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = os.path.join(log_dir, "biobeamer_launcher.log")
     logger = logging.getLogger("biobeamer_launcher")
     logger.setLevel(logging.INFO)
     formatter = logging.Formatter("[%(asctime)s] %(levelname)s: %(message)s")
+    # Remove existing handlers to avoid duplicate logs
+    if logger.hasHandlers():
+        logger.handlers.clear()
     # File handler
     fh = logging.FileHandler(log_file)
     fh.setFormatter(formatter)
@@ -284,17 +290,19 @@ def setup_logging():
 
 
 def main():
-    logger = setup_logging()
+    xml_config_path = get_xml_config_path()
+    # Read config first to get log_dir
+    cfg = read_launcher_config(xml_config_path)
+    log_dir = cfg["log_dir"] if cfg and cfg.get("log_dir") else get_cache_dir()
+    logger = setup_logging(log_dir)
     try:
-        xml_config_path = get_xml_config_path()
-        cfg = read_launcher_config(xml_config_path)
         if not cfg:
             logger.error("Could not read launcher config.")
             return
         print_launcher_config(cfg)
 
         # Step 1: Fetch the XML config file (local or remote)
-        xml_path = fetch_xml_config(cfg["config_file_path"], logger=logger)
+        xml_path = fetch_xml_config(cfg["xml_file_path"], logger=logger)
         if not xml_path:
             logger.error("Could not fetch XML config file.")
             return
@@ -342,8 +350,10 @@ def main():
         if not os.path.exists(biobeamer_script):
             logger.error(f"BioBeamer script not found: {biobeamer_script}")
             return
+        # Set up log file for subprocess in log_dir
+        biobeamer_log_file = os.path.join(log_dir, f"biobeamer_{cfg['host_name']}.log")
         cmd = [
-            "python3",
+            sys.executable,
             biobeamer_script,
             "--xml",
             xml_path,
@@ -351,13 +361,16 @@ def main():
             xsd_path,
             "--hostname",
             cfg["host_name"],
+            "--log_dir",
+            log_dir,
         ]
         logger.info(f"Running BioBeamer: {' '.join(cmd)}")
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            logger.info(f"BioBeamer stdout:\n{result.stdout}")
-            if result.stderr:
-                logger.error(f"BioBeamer stderr:\n{result.stderr}")
+            with open(biobeamer_log_file, "w") as logf:
+                result = subprocess.run(
+                    cmd, stdout=logf, stderr=subprocess.STDOUT, text=True
+                )
+            logger.info(f"BioBeamer log written to: {biobeamer_log_file}")
             if result.returncode != 0:
                 logger.error(f"BioBeamer exited with code {result.returncode}")
             else:
@@ -369,4 +382,5 @@ def main():
 
 
 if __name__ == "__main__":
+
     main()

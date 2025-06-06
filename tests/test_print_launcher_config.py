@@ -11,7 +11,7 @@ def test_print_launcher_config_prints_expected(monkeypatch, tmp_path):
     # Prepare a minimal config dict
     cfg = {
         "biobeamer_repo_url": "https://example.com/repo.git",
-        "config_file_path": "configs/BioBeamerTest.xml",
+        "xml_file_path": "configs/BioBeamerTest.xml",
         "xsd_file_path": "configs/BioBeamer2.xsd",
         "host_name": "testhost",
     }

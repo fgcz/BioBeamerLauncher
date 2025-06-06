@@ -22,12 +22,12 @@ def import_launcher():
 def test_read_launcher_config(tmp_path):
     launcher = import_launcher()
     logger = launcher.get_logger("test_logger")
-    ini_content = """[config]\nbiobeamer_repo_url = https://example.com/repo.git\nconfig_file_path = /tmp/config.xml\nxsd_file_path = /tmp/config.xsd\nhost_name = testhost\n"""
+    ini_content = """[config]\nbiobeamer_repo_url = https://example.com/repo.git\nxml_file_path = /tmp/config.xml\nxsd_file_path = /tmp/config.xsd\nhost_name = testhost\n"""
     ini_path = tmp_path / "launcher.ini"
     ini_path.write_text(ini_content)
     cfg = launcher.read_launcher_config(str(ini_path), logger=logger)
     assert cfg["biobeamer_repo_url"] == "https://example.com/repo.git"
-    assert cfg["config_file_path"] == "/tmp/config.xml"
+    assert cfg["xml_file_path"] == "/tmp/config.xml"
     assert cfg["xsd_file_path"] == "/tmp/config.xsd"
     assert cfg["host_name"] == "testhost"
 
@@ -37,7 +37,7 @@ def test_print_launcher_config(caplog):
     logger = launcher.get_logger("test_logger")
     cfg = {
         "biobeamer_repo_url": "https://example.com/repo.git",
-        "config_file_path": "/tmp/config.xml",
+        "xml_file_path": "/tmp/config.xml",
         "xsd_file_path": "/tmp/config.xsd",
         "host_name": "testhost",
     }

@@ -29,12 +29,15 @@ def test_launcher_with_real_sources(tmp_path, monkeypatch):
     config_dir = tmp_path / "src" / "config"
     config_dir.mkdir(parents=True, exist_ok=True)
     ini_path = config_dir / "launcher.ini"
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
     ini = f"""
 [config]
 biobeamer_repo_url = {BIOBEAMER_REPO_URL}
-config_file_path = {XML_URL}
+xml_file_path = {XML_URL}
 xsd_file_path = {XSD_URL}
 host_name = {HOST_NAME}
+log_dir = {log_dir}
 """
     ini_path.write_text(ini)
 

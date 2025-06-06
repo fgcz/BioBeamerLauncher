@@ -14,6 +14,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--xml')
 parser.add_argument('--xsd')
 parser.add_argument('--hostname')
+parser.add_argument('--log_dir')  # Accept and ignore log_dir
 args = parser.parse_args()
 # Simulate work: copy a file named 'input.txt' to 'output.txt' in the same dir as xml
 src = os.path.join(os.path.dirname(args.xml), 'input.txt')
@@ -59,7 +60,7 @@ def test_launcher_runs_biobeamer_and_copies_file(tmp_path, monkeypatch):
     )
     (xml_dir / "input.txt").write_text("testdata")
     # Write launcher.ini with absolute paths
-    ini = f"""[config]\nbiobeamer_repo_url = file://{repo_root}\nconfig_file_path = {xml_path.resolve()}\nxsd_file_path = {xsd_path.resolve()}\nhost_name = testhost\n"""
+    ini = f"""[config]\nbiobeamer_repo_url = file://{repo_root}\nxml_file_path = {xml_path.resolve()}\nxsd_file_path = {xsd_path.resolve()}\nhost_name = testhost\n"""
     ini_path = config_dir / "launcher.ini"
     ini_path.write_text(ini)
     # Copy launcher.py into place
@@ -80,7 +81,18 @@ def test_launcher_runs_biobeamer_and_copies_file(tmp_path, monkeypatch):
     )
     # Check output.txt was created
     output_txt = xml_dir / "output.txt"
+    if not output_txt.exists():
+        # Print log file for debugging
+        log_dir = tmp_path / "cache"
+        log_file = log_dir / "biobeamer_testhost.log"
+        if log_file.exists():
+            print("=== biobeamer_testhost.log ===")
+            print(log_file.read_text())
+        else:
+            print("Log file not found:", log_file)
     assert output_txt.exists(), "output.txt should be created by dummy biobeamer2.py"
     assert output_txt.read_text() == "testdata"
-    # Check logs or stdout for copy message
-    assert "Copied" in proc.stdout or "Copied" in proc.stderr
+    # Check logs for copy message
+    log_dir = tmp_path / "cache"
+    log_file = log_dir / "biobeamer_testhost.log"
+    assert "Copied" in log_file.read_text()
