@@ -7,7 +7,10 @@ import pytest
 
 
 # Official URLs
-XML_URL = "https://github.com/fgcz/BioBeamerConfig/raw/main/xml/BioBeamerTest.xml"
+
+XML_URL = (
+    "https://github.com/fgcz/BioBeamerConfig/raw/refs/heads/main/xml/BioBeamerTest.xml"
+)
 BIOBEAMER_REPO_URL = "https://github.com/fgcz/BioBeamer.git"
 BIOBEAMER_BRANCH = "6-project-toml"
 XSD_URL = (
@@ -189,7 +192,7 @@ def test_launcher_with_real_remote_scp(
         test_file_name="testfile_remote.txt",
         test_file_content="integration test file content remote scp",
         # Use a local temp dir for the source, matching the XML config
-        src_path=tmp_path / "biobeamer_src",
+        src_path=Path("/tmp/tmpsykd339y"),
         tgt_path=None,
         check_target=True,
         remote_fixture=remote_biobeamer_target_dir,
