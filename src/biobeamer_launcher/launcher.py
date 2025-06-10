@@ -338,7 +338,9 @@ def run_biobeamer_process(repo_path, xml_path, xsd_path, cfg, log_dir, logger):
     if not os.path.exists(biobeamer_script):
         logger.error(f"BioBeamer script not found: {biobeamer_script}")
         return 10  # nonzero error code
-    biobeamer_log_file = os.path.join(log_dir, f"biobeamer_{cfg['host_name']}.log")
+    biobeamer_log_file = os.path.join(
+        log_dir, f"biobeamer_subprocess_{cfg['host_name']}.log"
+    )
     cmd = [
         sys.executable,
         biobeamer_script,
@@ -357,12 +359,14 @@ def run_biobeamer_process(repo_path, xml_path, xsd_path, cfg, log_dir, logger):
             result = subprocess.run(
                 cmd, stdout=logf, stderr=subprocess.STDOUT, text=True
             )
-        logger.info(f"BioBeamer log written to: {biobeamer_log_file}")
+        logger.info(f"BioBeamer subprocess log written to: {biobeamer_log_file}")
         if result.returncode != 0:
             logger.error(f"BioBeamer exited with code {result.returncode}")
             return result.returncode
         else:
-            logger.info("BioBeamer finished successfully.")
+            logger.info(
+                f"BioBeamer subprocess finished; see subprocess log for output: {biobeamer_log_file}"
+            )
             return 0
     except Exception as e:
         logger.exception(f"Failed to run BioBeamer: {e}")
@@ -394,16 +398,15 @@ def run_launcher(cfg: dict, logger: logging.Logger, log_dir) -> int:
 def main() -> None:
     """Main entry point for BioBeamerLauncher."""
     args = parse_args()
-    default_log_dir = get_cache_dir()
-    logger = setup_logger(default_log_dir)
-    cfg = load_config(args, logger)
-    log_dir = cfg["log_dir"] if cfg and cfg.get("log_dir") else get_cache_dir()
-    # If log_dir from config is different, re-initialize logger
-    if log_dir != default_log_dir:
-        logger = setup_logger(log_dir)
+    # Load config first, using a temporary logger (stderr only)
+    temp_logger = get_logger("biobeamer_launcher_temp", logging.INFO, log_dir=None)
+    cfg = load_config(args, temp_logger)
     if not cfg:
-        logger.error("Could not read launcher config.")
+        temp_logger.error("Could not read launcher config.")
         sys.exit(30)
+    log_dir = cfg["log_dir"] if cfg and cfg.get("log_dir") else get_cache_dir()
+    # Now set up the real logger in the correct log_dir
+    logger = setup_logger(log_dir)
     exit_code = run_launcher(cfg, logger, log_dir)
     sys.exit(exit_code)
 
