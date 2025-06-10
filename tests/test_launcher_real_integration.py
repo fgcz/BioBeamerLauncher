@@ -101,6 +101,13 @@ log_dir = {log_dir}
     # Diagnostic: print SSH_AUTH_SOCK before running subprocess
     ssh_auth_sock = os.environ.get("SSH_AUTH_SOCK")
     print(f"[DIAG] SSH_AUTH_SOCK in test environment: {ssh_auth_sock}")
+    # Diagnostic: print ssh-add -l output from subprocess
+    agent_keys = subprocess.run(
+        ["ssh-add", "-l"], capture_output=True, text=True, env=os.environ.copy()
+    )
+    print(
+        f"[DIAG] ssh-add -l output in test environment:\n{agent_keys.stdout}\n{agent_keys.stderr}"
+    )
     proc = subprocess.run(
         [sys.executable, str(launcher_dest / "launcher.py")],
         cwd=tmp_path / "src",
