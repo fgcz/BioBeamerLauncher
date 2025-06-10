@@ -1,6 +1,7 @@
 import shutil
 import subprocess
 import sys
+import os
 from pathlib import Path
 
 import pytest
@@ -29,19 +30,23 @@ def remote_biobeamer_target_dir(request):
     remote_tgt = "/tmp/biobeamer_tgt"
     # Run mkdir -p and check for errors
     mkdir_cmd = f"ssh {remote_user}@{remote_host} 'mkdir -p {remote_tgt}'"
-    mkdir_proc = subprocess.run(mkdir_cmd, shell=True, capture_output=True, text=True)
+    mkdir_proc = subprocess.run(
+        mkdir_cmd, shell=True, capture_output=True, text=True, env=os.environ.copy()
+    )
     if mkdir_proc.returncode != 0:
         print(f"[remote_biobeamer_target_dir] mkdir failed: {mkdir_proc.stderr}")
         raise RuntimeError(f"Failed to create remote directory: {remote_tgt}")
     # Run chmod and check for errors
     chmod_cmd = f"ssh {remote_user}@{remote_host} 'chmod 777 {remote_tgt}'"
-    chmod_proc = subprocess.run(chmod_cmd, shell=True, capture_output=True, text=True)
+    chmod_proc = subprocess.run(
+        chmod_cmd, shell=True, capture_output=True, text=True, env=os.environ.copy()
+    )
     if chmod_proc.returncode != 0:
         print(f"[remote_biobeamer_target_dir] chmod failed: {chmod_proc.stderr}")
         raise RuntimeError(f"Failed to chmod remote directory: {remote_tgt}")
     yield remote_tgt, remote_user, remote_host
     cleanup_cmd = f"ssh {remote_user}@{remote_host} 'rm -rf {remote_tgt}/*'"
-    subprocess.run(cleanup_cmd, shell=True)
+    subprocess.run(cleanup_cmd, shell=True, env=os.environ.copy())
 
 
 def run_real_launcher_test(
@@ -99,6 +104,7 @@ log_dir = {log_dir}
         capture_output=True,
         text=True,
         timeout=300,
+        env=os.environ.copy(),
     )
     print("STDOUT:\n", proc.stdout)
     print("STDERR:\n", proc.stderr)
@@ -119,7 +125,11 @@ log_dir = {log_dir}
             remote_file = f"{remote_tgt}/{test_file_name}"
             check_cmd = f"ssh {remote_user}@{remote_host} 'test -f {remote_file} && cat {remote_file}'"
             result = subprocess.run(
-                check_cmd, shell=True, capture_output=True, text=True
+                check_cmd,
+                shell=True,
+                capture_output=True,
+                text=True,
+                env=os.environ.copy(),
             )
             assert (
                 result.returncode == 0
