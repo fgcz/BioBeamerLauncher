@@ -96,7 +96,8 @@ log_dir = {log_dir}
     src_path.mkdir(parents=True, exist_ok=True)
     if check_target:
         tgt_path.mkdir(parents=True, exist_ok=True)
-    test_file = src_path / test_file_name
+    # Ensure test file is created with forward slashes for cross-platform compatibility
+    test_file = Path(str(src_path / test_file_name).replace("\\", "/"))
     test_file.write_text(test_file_content)
     print(f"Test file created at {test_file}, Test file exists: {test_file.exists()}")
     # Diagnostic: print SSH_AUTH_SOCK before running subprocess
