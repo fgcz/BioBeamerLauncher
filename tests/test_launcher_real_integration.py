@@ -98,6 +98,7 @@ log_dir = {log_dir}
         tgt_path.mkdir(parents=True, exist_ok=True)
     test_file = src_path / test_file_name
     test_file.write_text(test_file_content)
+    print(f"Test file created at {test_file}, Test file exists: {test_file.exists()}")
     # Diagnostic: print SSH_AUTH_SOCK before running subprocess
     ssh_auth_sock = os.environ.get("SSH_AUTH_SOCK")
     print(f"[DIAG] SSH_AUTH_SOCK in test environment: {ssh_auth_sock}")
