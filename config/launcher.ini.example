@@ -1,4 +1,4 @@
-add[config]
+[config]
 # URL of the BioBeamerConfig repository (can be a git repo or direct XML URL)
 config_repo_url = https://github.com/yourorg/BioBeamerConfig.git
 # Path to the XML config file within the repo
