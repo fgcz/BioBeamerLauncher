@@ -15,6 +15,9 @@ test = [
     "pytest"
 ]
 
+[project.scripts]
+biobeamer-launcher = "biobeamer_launcher.launcher:main"
+
 [tool.setuptools]
 packages = ["biobeamer_launcher"]
 package-dir = {"" = "src"}
