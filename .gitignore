@@ -41,6 +41,4 @@ build/
 release-*/
 
 # Custom project scripts and batch files
-*.bat
-*.sh
 /BioBeamerLauncher.iml
