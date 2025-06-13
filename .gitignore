@@ -6,29 +6,39 @@
 __pycache__/
 *.pyc
 *.pyo
-*.pyd
+*.egg-info/
 
 # Virtual environments
 venv/
 venv37/
+biobeamer-launcher-venv/
+.venv/
 
 # Logs and output
 *.log
 log/
 log/*
+tests/log/*
 
 # OS-specific files
 .DS_Store
 Thumbs.db
 
-# Test and temp files
+# uv binaries (do not version these)
+scripts/uv
+scripts/uv.exe
+
+# Project scripts (keep these tracked, but ignore temp/bak)
 *.tmp
 *.bak
 
 # Distribution/build
 dist/
 build/
-*.egg-info/
+*.lock
+*.tar.gz
+*.zip
+release-*/
 
 # Custom project scripts and batch files
 *.bat
