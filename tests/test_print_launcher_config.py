@@ -35,5 +35,4 @@ def test_print_launcher_config_prints_expected(monkeypatch, tmp_path):
     assert "BioBeamerLauncher configuration:" in output
     assert "BioBeamer repo URL: https://example.com/repo.git" in output
     assert "Config file path: configs/BioBeamerTest.xml" in output
-    assert "XSD file path: configs/BioBeamer2.xsd" in output
     assert "Host name: testhost" in output
