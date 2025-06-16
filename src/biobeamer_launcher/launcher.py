@@ -329,8 +329,13 @@ def ensure_biobeamer_venv(repo_path, version, logger):
     cache_dir = get_cache_dir()
     venv_dir = os.path.join(cache_dir, f"BioBeamer-venv-{version}")
     venv_bin = os.path.join(venv_dir, "bin")
-    venv_python = os.path.join(venv_bin, "python")
-    venv_biobeamer2 = os.path.join(venv_bin, "biobeamer2")
+    venv_scripts = os.path.join(venv_dir, "Scripts")
+    if platform.system() == "Windows":
+        venv_python = os.path.join(venv_scripts, "python.exe")
+        venv_biobeamer2 = os.path.join(venv_scripts, "biobeamer2.exe")
+    else:
+        venv_python = os.path.join(venv_bin, "python")
+        venv_biobeamer2 = os.path.join(venv_bin, "biobeamer2")
     uv_exe = find_uv_executable()
     if not os.path.exists(venv_biobeamer2):
         logger.info(
@@ -351,7 +356,7 @@ def ensure_biobeamer_venv(repo_path, version, logger):
             env={
                 **os.environ,
                 "VIRTUAL_ENV": venv_dir,
-                "PATH": f"{venv_bin}:{os.environ.get('PATH','')}",
+                "PATH": f"{venv_bin if platform.system() != 'Windows' else venv_scripts}:{os.environ.get('PATH','')}",
             },
             capture_output=True,
         )
@@ -364,7 +369,7 @@ def ensure_biobeamer_venv(repo_path, version, logger):
         logger.info(
             f"BioBeamer venv for version {version} already exists at {venv_dir}."
         )
-    return venv_bin
+    return venv_bin if platform.system() != "Windows" else venv_scripts
 
 
 def run_biobeamer_process(repo_path, xml_path, cfg, log_dir, logger, version=None):
