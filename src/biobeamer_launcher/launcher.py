@@ -209,10 +209,25 @@ def fetch_or_update_biobeamer_repo(
     )
     if result.returncode != 0:
         logger.error(
-            f"Failed to checkout version '{version}': {result.stderr.decode().strip()}"
+            f"Failed to checkout version {version}: {result.stderr.decode().strip()}"
         )
         return None
-    logger.info(f"BioBeamer repo ready at: {repo_path} (version: {version})")
+
+    # Ensure venv exists in the repo_path
+    venv_path = os.path.join(repo_path, "venv")
+    if not os.path.exists(venv_path):
+        logger.info(f"Creating virtual environment for BioBeamer at {venv_path}...")
+        result = subprocess.run(
+            [sys.executable, "-m", "venv", venv_path], capture_output=True
+        )
+        if result.returncode != 0:
+            logger.error(f"Failed to create venv: {result.stderr.decode().strip()}")
+            return None
+        else:
+            logger.info("Virtual environment created successfully.")
+    else:
+        logger.info(f"Virtual environment already exists at {venv_path}.")
+
     return repo_path
 
 
