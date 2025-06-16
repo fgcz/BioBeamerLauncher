@@ -1,13 +1,13 @@
 @echo off
 setlocal
 
-REM Always run from project root (parent of this script's directory)
-cd /d "%~dp0.."
+REM Always run from the directory where this script is located
+cd /d "%~dp0"
 
 REM Find uv.exe: prefer .\uv.exe, then scripts\uv.exe, else uv.exe from PATH
-if exist .\uv.exe (
+if exist ".\uv.exe" (
     set "UV_CMD=.\uv.exe"
-) else if exist scripts\uv.exe (
+) else if exist "scripts\uv.exe" (
     set "UV_CMD=scripts\uv.exe"
 ) else (
     where uv.exe >nul 2>nul
