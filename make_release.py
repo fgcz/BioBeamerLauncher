@@ -11,9 +11,10 @@ CONFIG_DIR = os.path.join(PROJECT_ROOT, "config")
 README = os.path.join(PROJECT_ROOT, "ReadMe.md")
 LICENSE = os.path.join(PROJECT_ROOT, "LICENSE")
 
-# Release output
-RELEASE_WIN = os.path.join(PROJECT_ROOT, "release-win")
-RELEASE_LINUX = os.path.join(PROJECT_ROOT, "release-linux")
+# Release output (now inside build/)
+BUILD_DIR = os.path.join(PROJECT_ROOT, "build")
+RELEASE_WIN = os.path.join(BUILD_DIR, "release-win")
+RELEASE_LINUX = os.path.join(BUILD_DIR, "release-linux")
 
 # Files to include (relative to scripts/)
 WIN_FILES = ["uv.exe", "setup.bat", "start.bat"]
@@ -52,14 +53,16 @@ def set_executable(path):
 
 
 def prepare_release(platform):
+    if not os.path.exists(BUILD_DIR):
+        os.makedirs(BUILD_DIR)
     if platform == "win":
         release_dir = RELEASE_WIN
         files = WIN_FILES
-        archive = os.path.join(PROJECT_ROOT, "BioBeamerLauncher-win.zip")
+        archive = os.path.join(BUILD_DIR, "BioBeamerLauncher-win.zip")
     else:
         release_dir = RELEASE_LINUX
         files = LINUX_FILES
-        archive = os.path.join(PROJECT_ROOT, "BioBeamerLauncher-linux.tar.gz")
+        archive = os.path.join(BUILD_DIR, "BioBeamerLauncher-linux.tar.gz")
 
     clean_dir(release_dir)
     copy_files(files, SCRIPTS_DIR, release_dir)
