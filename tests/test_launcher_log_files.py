@@ -3,6 +3,7 @@ import shutil
 from pathlib import Path
 import re
 import pytest
+from conftest import make_dummy_biobeamer2_py, make_dummy_pyproject_toml
 
 
 def test_launcher_log_files(tmp_path, monkeypatch):
@@ -20,15 +21,34 @@ def test_launcher_log_files(tmp_path, monkeypatch):
     tgt_path.mkdir(parents=True, exist_ok=True)
     (src_path / test_file_name).write_text(test_file_content)
 
-    # Write a minimal launcher.ini
+    # Create dummy BioBeamer repo with script and pyproject.toml
+    repo_dir = tmp_path / "biobeamer_repo" / "BioBeamer" / "src"
+    repo_dir.mkdir(parents=True)
+    biobeamer2_py = repo_dir / "biobeamer2.py"
+    make_dummy_biobeamer2_py(biobeamer2_py, variant="log_files")
+    repo_root = repo_dir.parent
+    make_dummy_pyproject_toml(repo_root / "pyproject.toml")
+    import subprocess
+
+    subprocess.run(["git", "init", "--initial-branch=main"], cwd=repo_root)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_root)
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_root)
+    subprocess.run(["git", "add", "pyproject.toml"], cwd=repo_root)
+    subprocess.run(["git", "add", "src/biobeamer2.py"], cwd=repo_root)
+    subprocess.run(
+        ["git", "commit", "-m", "add dummy biobeamer2.py and pyproject.toml"],
+        cwd=repo_root,
+    )
+    subprocess.run(["git", "tag", "6-project-toml"], cwd=repo_root)
+
+    # Write a minimal launcher.ini (after repo_root is defined)
     config_dir = tmp_path / "src" / "config"
     config_dir.mkdir(parents=True, exist_ok=True)
     ini_path = config_dir / "launcher.ini"
     ini = f"""
 [config]
-biobeamer_repo_url = https://github.com/fgcz/BioBeamer.git
+biobeamer_repo_url = file://{repo_root}
 xml_file_path = https://github.com/fgcz/BioBeamerConfig/raw/main/xml/BioBeamerTest.xml
-xsd_file_path = https://github.com/fgcz/BioBeamerConfig/raw/refs/heads/main/xml/BioBeamer2.xsd
 host_name = testhost_log_check
 log_dir = {log_dir}
 """
