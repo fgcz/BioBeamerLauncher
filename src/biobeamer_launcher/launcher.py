@@ -61,7 +61,6 @@ def read_launcher_config(config_path: str, logger: logging.Logger) -> Optional[d
     config_dict = {
         "biobeamer_repo_url": config.get("config", "biobeamer_repo_url", fallback=None),
         "xml_file_path": config.get("config", "xml_file_path", fallback=None),
-        "xsd_file_path": config.get("config", "xsd_file_path", fallback=None),
         "host_name": config.get("config", "host_name", fallback=None),
         "log_dir": config.get("config", "log_dir", fallback=None),
     }
@@ -74,7 +73,6 @@ def print_launcher_config(cfg: dict, logger: logging.Logger) -> None:
         "BioBeamerLauncher configuration:\n"
         f"  BioBeamer repo URL: {cfg['biobeamer_repo_url']}\n"
         f"  Config file path: {cfg['xml_file_path']}\n"
-        f"  XSD file path: {cfg['xsd_file_path']}\n"
         f"  Host name: {cfg['host_name']}"
     )
     logger.info(msg)
@@ -136,25 +134,6 @@ def get_cache_dir() -> str:
             return os.path.expanduser("~/.cache/biobeamer_launcher/BioBeamerConfig")
 
 
-def fetch_xsd_file(xsd_file_path: str, logger: logging.Logger) -> Optional[str]:
-    """Fetch the XSD file from a local path or URL. Returns the local file path or None on failure."""
-    if not xsd_file_path:
-        logger.error("No XSD file path provided in config.")
-        return None
-    if xsd_file_path.startswith(("http://", "https://", "ftp://")):
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".xsd") as tmp:
-            logger.info(f"Downloading XSD from {xsd_file_path}...")
-            urllib.request.urlretrieve(xsd_file_path, tmp.name)
-            logger.info(f"Downloaded XSD to {tmp.name}")
-            return tmp.name
-    else:
-        if not os.path.exists(xsd_file_path):
-            logger.error(f"XSD file not found: {xsd_file_path}")
-            return None
-        logger.info(f"Using local XSD: {xsd_file_path}")
-        return xsd_file_path
-
-
 def parse_xml_and_select_host(
     xml_path: str, host_name: str, logger: logging.Logger
 ) -> Optional[dict]:
@@ -183,25 +162,6 @@ def parse_xml_and_select_host(
     except Exception as e:
         logger.error(f"Error parsing XML: {e}")
         return None
-
-
-def validate_xml_with_xsd(xml_path: str, xsd_path: str, logger: logging.Logger) -> bool:
-    """Validate the XML file against the XSD schema. Returns True if valid, False otherwise."""
-    try:
-        with open(xsd_path, "rb") as xsd_file:
-            xsd_doc = LET.parse(xsd_file)
-            schema = LET.XMLSchema(xsd_doc)
-        with open(xml_path, "rb") as xml_file:
-            xml_doc = LET.parse(xml_file)
-        schema.assertValid(xml_doc)
-        logger.info("XML validation against XSD succeeded.")
-        return True
-    except LET.DocumentInvalid as e:
-        logger.error(f"XML validation error: {e}")
-        return False
-    except Exception as e:
-        logger.error(f"Error during XML validation: {e}")
-        return False
 
 
 def extract_biobeamer_version(
@@ -287,23 +247,6 @@ def fetch_and_log_xml_config(cfg, logger):
     return xml_path
 
 
-def fetch_and_log_xsd_file(cfg, logger):
-    xsd_path = fetch_xsd_file(cfg["xsd_file_path"], logger=logger)
-    if not xsd_path:
-        logger.error("Could not fetch XSD file.")
-        return None
-    logger.info(f"XSD file path: {xsd_path}")
-    return xsd_path
-
-
-def validate_xml_config(xml_path, xsd_path, logger):
-    if not validate_xml_with_xsd(xml_path, xsd_path, logger=logger):
-        logger.error("XML validation failed. Exiting.")
-        return False
-    logger.info("XML validation succeeded.")
-    return True
-
-
 def select_host_entry(xml_path, cfg, logger):
     host_entry = parse_xml_and_select_host(xml_path, cfg["host_name"], logger=logger)
     if not host_entry:
@@ -333,21 +276,101 @@ def prepare_biobeamer_repo(cfg, version, logger):
     return repo_path
 
 
-def run_biobeamer_process(repo_path, xml_path, xsd_path, cfg, log_dir, logger):
-    biobeamer_script = os.path.join(repo_path, "src", "biobeamer2.py")
-    if not os.path.exists(biobeamer_script):
-        logger.error(f"BioBeamer script not found: {biobeamer_script}")
-        return 10  # nonzero error code
+def find_uv_executable():
+    """
+    Find the uv executable to use for venv and pip commands.
+    Order:
+    1. UV_PATH env var
+    2. uv in PATH
+    3. scripts/uv relative to project root
+    4. scripts/uv.exe (for Windows)
+    """
+    import shutil
+
+    uv_env = os.environ.get("UV_PATH")
+    if uv_env and os.path.isfile(uv_env) and os.access(uv_env, os.X_OK):
+        return uv_env
+    uv_in_path = shutil.which("uv")
+    if uv_in_path:
+        return uv_in_path
+    # Try bundled scripts/uv
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    uv_script = os.path.join(project_root, "scripts", "uv")
+    if os.path.isfile(uv_script) and os.access(uv_script, os.X_OK):
+        return uv_script
+    uv_script_win = os.path.join(project_root, "scripts", "uv.exe")
+    if os.path.isfile(uv_script_win) and os.access(uv_script_win, os.X_OK):
+        return uv_script_win
+    raise FileNotFoundError(
+        "Could not find 'uv' executable. Please ensure it is installed and available in your PATH, or set UV_PATH."
+    )
+
+
+def ensure_biobeamer_venv(repo_path, version, logger):
+    """
+    Ensure a venv for the given BioBeamer version exists and BioBeamer is installed in it.
+    Returns the path to the venv's bin directory.
+    """
+    cache_dir = get_cache_dir()
+    venv_dir = os.path.join(cache_dir, f"BioBeamer-venv-{version}")
+    venv_bin = os.path.join(venv_dir, "bin")
+    venv_python = os.path.join(venv_bin, "python")
+    venv_biobeamer2 = os.path.join(venv_bin, "biobeamer2")
+    uv_exe = find_uv_executable()
+    if not os.path.exists(venv_biobeamer2):
+        logger.info(
+            f"Creating venv for BioBeamer version {version} at {venv_dir} using uv..."
+        )
+        # Create venv
+        result = subprocess.run(
+            [uv_exe, "venv", venv_dir],
+            capture_output=True,
+        )
+        if result.returncode != 0:
+            logger.error(f"Failed to create venv: {result.stderr.decode().strip()}")
+            return None
+        # Install BioBeamer from repo_path
+        logger.info(f"Installing BioBeamer into venv from {repo_path}...")
+        result = subprocess.run(
+            [uv_exe, "pip", "install", repo_path],
+            env={
+                **os.environ,
+                "VIRTUAL_ENV": venv_dir,
+                "PATH": f"{venv_bin}:{os.environ.get('PATH','')}",
+            },
+            capture_output=True,
+        )
+        if result.returncode != 0:
+            logger.error(
+                f"Failed to install BioBeamer: {result.stderr.decode().strip()}"
+            )
+            return None
+    else:
+        logger.info(
+            f"BioBeamer venv for version {version} already exists at {venv_dir}."
+        )
+    return venv_bin
+
+
+def run_biobeamer_process(repo_path, xml_path, cfg, log_dir, logger, version=None):
+    # Use venv and run biobeamer2 entry point
+    if version is None:
+        logger.error("BioBeamer version not specified for venv setup.")
+        return 12
+    venv_bin = ensure_biobeamer_venv(repo_path, version, logger)
+    if not venv_bin:
+        return 13
+    biobeamer2_exe = os.path.join(venv_bin, "biobeamer2")
+    if not os.path.exists(biobeamer2_exe):
+        logger.error(f"BioBeamer entry point not found: {biobeamer2_exe}")
+        return 14
     biobeamer_log_file = os.path.join(
         log_dir, f"biobeamer_subprocess_{cfg['host_name']}.log"
     )
     cmd = [
-        sys.executable,
-        biobeamer_script,
+        biobeamer2_exe,
         "--xml",
         xml_path,
-        "--xsd",
-        xsd_path,
         "--hostname",
         cfg["host_name"],
         "--log_dir",
@@ -378,11 +401,6 @@ def run_launcher(cfg: dict, logger: logging.Logger, log_dir) -> int:
     xml_path = fetch_and_log_xml_config(cfg, logger)
     if not xml_path:
         return 20
-    xsd_path = fetch_and_log_xsd_file(cfg, logger)
-    if not xsd_path:
-        return 21
-    if not validate_xml_config(xml_path, xsd_path, logger):
-        return 22
     host_entry = select_host_entry(xml_path, cfg, logger)
     if not host_entry:
         return 23
@@ -392,7 +410,9 @@ def run_launcher(cfg: dict, logger: logging.Logger, log_dir) -> int:
     repo_path = prepare_biobeamer_repo(cfg, version, logger)
     if not repo_path:
         return 25
-    return run_biobeamer_process(repo_path, xml_path, xsd_path, cfg, log_dir, logger)
+    return run_biobeamer_process(
+        repo_path, xml_path, cfg, log_dir, logger, version=version
+    )
 
 
 def main() -> None:
