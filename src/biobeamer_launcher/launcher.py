@@ -380,7 +380,10 @@ def run_biobeamer_process(repo_path, xml_path, cfg, log_dir, logger, version=Non
     venv_bin = ensure_biobeamer_venv(repo_path, version, logger)
     if not venv_bin:
         return 13
-    biobeamer2_exe = os.path.join(venv_bin, "biobeamer2")
+    if platform.system() == "Windows":
+        biobeamer2_exe = os.path.join(venv_bin, "biobeamer2.exe")
+    else:
+        biobeamer2_exe = os.path.join(venv_bin, "biobeamer2")
     if not os.path.exists(biobeamer2_exe):
         logger.error(f"BioBeamer entry point not found: {biobeamer2_exe}")
         return 14
