@@ -63,6 +63,7 @@ def read_launcher_config(config_path: str, logger: logging.Logger) -> Optional[d
         "xml_file_path": config.get("config", "xml_file_path", fallback=None),
         "host_name": config.get("config", "host_name", fallback=None),
         "log_dir": config.get("config", "log_dir", fallback=None),
+        "password": config.get("config","password",fallback=""),
     }
     logger.debug(f"Config values loaded: {config_dict}")
     return config_dict
