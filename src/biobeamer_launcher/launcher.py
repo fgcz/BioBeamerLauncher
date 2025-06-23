@@ -398,6 +398,8 @@ def run_biobeamer_process(repo_path, xml_path, cfg, log_dir, logger, version=Non
         cfg["host_name"],
         "--log_dir",
         log_dir,
+        "--password",
+        cfg["password"],
     ]
     logger.info(f"Running BioBeamer: {' '.join(cmd)}")
     try:
