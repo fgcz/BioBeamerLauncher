@@ -53,6 +53,26 @@ To update to the latest version, simply re-run `setup.bat` or `setup.sh`.
 
 ---
 
+## Debugging
+
+If you encounter issues or need to debug BioBeamer problems:
+
+### Quick Debug Setup
+```bash
+# Get debug information with setup
+python -m biobeamer_launcher.launcher --config config/launcher.ini --debug
+```
+
+This command will:
+- ✅ Set up the exact BioBeamer environment used in production
+- ✅ Print copy-paste ready debugging commands  
+- ✅ Show IDE configuration paths
+- ✅ Provide step-by-step debugging instructions
+
+**For detailed debugging instructions, see [DEBUGGING.md](DEBUGGING.md)**
+
+---
+
 ## Developer & Advanced Usage
 
 ### Manual Installation

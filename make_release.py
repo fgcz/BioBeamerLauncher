@@ -10,6 +10,7 @@ SCRIPTS_DIR = os.path.join(PROJECT_ROOT, "scripts")
 CONFIG_DIR = os.path.join(PROJECT_ROOT, "config")
 README = os.path.join(PROJECT_ROOT, "ReadMe.md")
 LICENSE = os.path.join(PROJECT_ROOT, "LICENSE")
+DEBUGGING = os.path.join(PROJECT_ROOT, "DEBUGGING.md")
 
 # Release output (now inside build/)
 BUILD_DIR = os.path.join(PROJECT_ROOT, "build")
@@ -72,6 +73,8 @@ def prepare_release(platform):
         shutil.copy(README, os.path.join(release_dir, "ReadMe.md"))
     if os.path.exists(LICENSE):
         shutil.copy(LICENSE, os.path.join(release_dir, "LICENSE"))
+    if os.path.exists(DEBUGGING):
+        shutil.copy(DEBUGGING, os.path.join(release_dir, "DEBUGGING.md"))
     # Set executable permissions for Linux
     if platform == "linux":
         for f in LINUX_FILES:

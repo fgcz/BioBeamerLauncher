@@ -214,21 +214,6 @@ def fetch_or_update_biobeamer_repo(
         )
         return None
 
-    # Ensure venv exists in the repo_path
-    venv_path = os.path.join(repo_path, "venv")
-    if not os.path.exists(venv_path):
-        logger.info(f"Creating virtual environment for BioBeamer at {venv_path}...")
-        result = subprocess.run(
-            [sys.executable, "-m", "venv", venv_path], capture_output=True
-        )
-        if result.returncode != 0:
-            logger.error(f"Failed to create venv: {result.stderr.decode().strip()}")
-            return None
-        else:
-            logger.info("Virtual environment created successfully.")
-    else:
-        logger.info(f"Virtual environment already exists at {venv_path}.")
-
     return repo_path
 
 
@@ -327,10 +312,11 @@ def find_uv_executable():
     )
 
 
-def ensure_biobeamer_venv(repo_path, version, logger):
+def setup_biobeamer_venv(repo_path, version, logger):
     """
-    Ensure a venv for the given BioBeamer version exists and BioBeamer is installed in it.
-    Returns the path to the venv's bin directory.
+    Set up a virtual environment for the given BioBeamer version and install BioBeamer into it.
+    Creates the venv if it doesn't exist, installs BioBeamer from the repo path.
+    Returns the path to the venv's bin/Scripts directory.
     """
     cache_dir = get_cache_dir()
     venv_dir = os.path.join(cache_dir, f"BioBeamer-venv-{version}")
@@ -383,7 +369,7 @@ def run_biobeamer_process(repo_path, xml_path, cfg, log_dir, logger, version=Non
     if version is None:
         logger.error("BioBeamer version not specified for venv setup.")
         return 12
-    venv_bin = ensure_biobeamer_venv(repo_path, version, logger)
+    venv_bin = setup_biobeamer_venv(repo_path, version, logger)
     if not venv_bin:
         return 13
     if platform.system() == "Windows":
@@ -449,6 +435,7 @@ def run_launcher(cfg: dict, logger: logging.Logger, log_dir) -> int:
 def print_debug_info(cfg, logger):
     """
     Print BioBeamer repo path, venv path, version, and recommended PyCharm interpreter path.
+    Actually sets up the repo and venv to ensure the paths are valid.
     """
     xml_path = fetch_xml_config(cfg["xml_file_path"], logger=logger)
     if not xml_path:
@@ -465,22 +452,66 @@ def print_debug_info(cfg, logger):
         logger.error("No BioBeamer version specified in host entry.")
         print("ERROR: No BioBeamer version specified in host entry.")
         return 3
+    
+    # Actually set up the repo and venv to ensure paths are valid
+    repo_path = prepare_biobeamer_repo(cfg, version, logger)
+    if not repo_path:
+        logger.error("Failed to prepare BioBeamer repo.")
+        print("ERROR: Failed to prepare BioBeamer repo.")
+        return 4
+    
+    venv_bin = setup_biobeamer_venv(repo_path, version, logger)
+    if not venv_bin:
+        logger.error("Failed to set up BioBeamer venv.")
+        print("ERROR: Failed to set up BioBeamer venv.")
+        return 5
+    
     cache_dir = get_cache_dir()
-    repo_path = os.path.join(cache_dir, "BioBeamer")
     venv_dir = os.path.join(cache_dir, f"BioBeamer-venv-{version}")
     if platform.system() == "Windows":
         python_path = os.path.join(venv_dir, "Scripts", "python.exe")
     else:
         python_path = os.path.join(venv_dir, "bin", "python")
-    print("\nBioBeamer Debug Info:")
-    print(f"  BioBeamer repo path: {repo_path}")
-    print(f"  BioBeamer venv path: {venv_dir}")
-    print(f"  BioBeamer version: {version}")
-    print(f"  Recommended PyCharm interpreter: {python_path}\n")
-    print("To debug in PyCharm:")
-    print(f"  1. Open the repo path above as your project.")
-    print(f"  2. Set the interpreter to the path above.")
-    print(f"  3. Use the same arguments as the launcher for your run configuration.")
+    
+    # Generate the exact biobeamer command arguments
+    biobeamer_args = [
+        "--xml", xml_path,
+        "--hostname", cfg["host_name"],
+        "--log_dir", cfg.get("log_dir", get_cache_dir()),
+        "--password", cfg["password"]
+    ]
+    
+    print("\n" + "="*60)
+    print("BIOBEAMER DEBUG INFO")
+    print("="*60)
+    print(f"BioBeamer repo path:     {repo_path}")
+    print(f"BioBeamer venv path:     {venv_dir}")
+    print(f"BioBeamer version:       {version}")
+    print(f"Python interpreter:      {python_path}")
+    print(f"XML config path:         {xml_path}")
+    print(f"Host name:               {cfg['host_name']}")
+    print()
+    print("EXACT COMMAND ARGUMENTS (copy-paste ready):")
+    print("=" * 50)
+    args_str = " ".join(f'"{arg}"' if " " in arg else arg for arg in biobeamer_args)
+    print(f"{args_str}")
+    print()
+    print("DEBUGGING SETUP:")
+    print("=" * 20)
+    print("1. IDE Setup:")
+    print(f"   - Open project: {repo_path}")
+    print(f"   - Set interpreter: {python_path}")
+    print()
+    print("2. Run Configuration:")
+    print("   - Script: biobeamer (entry point)")
+    print("   - Arguments: (copy from above)")
+    print()
+    print("3. Command Line Debug:")
+    print(f"   source {venv_dir}/bin/activate")
+    print(f"   biobeamer {args_str}")
+    print()
+    print("See DEBUGGING.md for detailed instructions.")
+    print("="*60)
     return 0
 
 
