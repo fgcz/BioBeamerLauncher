@@ -63,7 +63,7 @@ def read_launcher_config(config_path: str, logger: logging.Logger) -> Optional[d
         "xml_file_path": config.get("config", "xml_file_path", fallback=None),
         "host_name": config.get("config", "host_name", fallback=None),
         "log_dir": config.get("config", "log_dir", fallback=None),
-        "password": config.get("config","password",fallback=""),
+        "password": config.get("config", "password", fallback=""),
     }
     logger.debug(f"Config values loaded: {config_dict}")
     return config_dict
@@ -236,6 +236,11 @@ def parse_args():
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", help="Path to launcher.ini config file")
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Print BioBeamer repo, venv, version, and recommended PyCharm interpreter path, then exit.",
+    )
     args, unknown = parser.parse_known_args()
     return args
 
@@ -441,6 +446,44 @@ def run_launcher(cfg: dict, logger: logging.Logger, log_dir) -> int:
     )
 
 
+def print_debug_info(cfg, logger):
+    """
+    Print BioBeamer repo path, venv path, version, and recommended PyCharm interpreter path.
+    """
+    xml_path = fetch_xml_config(cfg["xml_file_path"], logger=logger)
+    if not xml_path:
+        logger.error("Could not fetch XML config file.")
+        print("ERROR: Could not fetch XML config file.")
+        return 1
+    host_entry = parse_xml_and_select_host(xml_path, cfg["host_name"], logger=logger)
+    if not host_entry:
+        logger.error("Could not find host entry in XML.")
+        print("ERROR: Could not find host entry in XML.")
+        return 2
+    version = extract_biobeamer_version(host_entry, logger=logger)
+    if not version:
+        logger.error("No BioBeamer version specified in host entry.")
+        print("ERROR: No BioBeamer version specified in host entry.")
+        return 3
+    cache_dir = get_cache_dir()
+    repo_path = os.path.join(cache_dir, "BioBeamer")
+    venv_dir = os.path.join(cache_dir, f"BioBeamer-venv-{version}")
+    if platform.system() == "Windows":
+        python_path = os.path.join(venv_dir, "Scripts", "python.exe")
+    else:
+        python_path = os.path.join(venv_dir, "bin", "python")
+    print("\nBioBeamer Debug Info:")
+    print(f"  BioBeamer repo path: {repo_path}")
+    print(f"  BioBeamer venv path: {venv_dir}")
+    print(f"  BioBeamer version: {version}")
+    print(f"  Recommended PyCharm interpreter: {python_path}\n")
+    print("To debug in PyCharm:")
+    print(f"  1. Open the repo path above as your project.")
+    print(f"  2. Set the interpreter to the path above.")
+    print(f"  3. Use the same arguments as the launcher for your run configuration.")
+    return 0
+
+
 def main() -> None:
     """Main entry point for BioBeamerLauncher."""
     args = parse_args()
@@ -453,6 +496,9 @@ def main() -> None:
     log_dir = cfg["log_dir"] if cfg and cfg.get("log_dir") else get_cache_dir()
     # Now set up the real logger in the correct log_dir
     logger = setup_logger(log_dir)
+    if getattr(args, "debug", False):
+        exit_code = print_debug_info(cfg, logger)
+        sys.exit(exit_code)
     exit_code = run_launcher(cfg, logger, log_dir)
     sys.exit(exit_code)
 
