@@ -24,8 +24,10 @@ def test_setup_script_runs():
     if os.path.exists(VENV_DIR):
         shutil.rmtree(VENV_DIR)
     assert os.path.exists(SETUP_SCRIPT), f"Setup script not found: {SETUP_SCRIPT}"
-    # Run the setup script
-    result = subprocess.run(["bash", SETUP_SCRIPT], capture_output=True, text=True)
+    # Run the setup script from the project root so venv is created in the right place
+    result = subprocess.run(
+        ["bash", SETUP_SCRIPT], capture_output=True, text=True, cwd=PROJECT_ROOT
+    )
     print(result.stdout)
     print(result.stderr)
     assert result.returncode == 0, f"setup.sh failed: {result.stderr}"

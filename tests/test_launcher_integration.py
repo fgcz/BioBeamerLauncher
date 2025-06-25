@@ -17,11 +17,11 @@ def test_launcher_runs_biobeamer_and_copies_file(tmp_path, monkeypatch):
     config_dir.mkdir(parents=True)
     xml_dir = tmp_path / "xml"
     xml_dir.mkdir()
-    repo_dir = tmp_path / "biobeamer_repo" / "BioBeamer" / "src"
+    repo_dir = tmp_path / "biobeamer_repo" / "BioBeamer" / "src" / "biobeamer"
     repo_dir.mkdir(parents=True)
-    # Write dummy biobeamer2.py
-    biobeamer2_py = repo_dir / "biobeamer2.py"
-    make_dummy_biobeamer2_py(biobeamer2_py, variant="integration")
+    # Write dummy cli.py (main entry point)
+    cli_py = repo_dir / "cli.py"
+    make_dummy_biobeamer2_py(cli_py, variant="integration")
     # Git init and tag
     repo_root = repo_dir.parent
     subprocess.run(["git", "init", "--initial-branch=main"], cwd=repo_root)
@@ -29,10 +29,13 @@ def test_launcher_runs_biobeamer_and_copies_file(tmp_path, monkeypatch):
     subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_root)
     # Add minimal pyproject.toml so uv/pip can install the dummy package
     make_dummy_pyproject_toml(repo_root / "pyproject.toml")
+    # Create __init__.py for the package
+    (repo_dir / "__init__.py").write_text("")
     subprocess.run(["git", "add", "pyproject.toml"], cwd=repo_root)
-    subprocess.run(["git", "add", "src/biobeamer2.py"], cwd=repo_root)
+    subprocess.run(["git", "add", "biobeamer/cli.py"], cwd=repo_root)
+    subprocess.run(["git", "add", "biobeamer/__init__.py"], cwd=repo_root)
     subprocess.run(
-        ["git", "commit", "-m", "add dummy biobeamer2.py and pyproject.toml"],
+        ["git", "commit", "-m", "add dummy cli.py and pyproject.toml"],
         cwd=repo_root,
     )
     subprocess.run(["git", "tag", "v1.0.0"], cwd=repo_root)
@@ -91,7 +94,7 @@ def test_launcher_runs_biobeamer_and_copies_file(tmp_path, monkeypatch):
             print("Launcher log file not found:", launcher_log_file)
         print("STDOUT:\n", proc.stdout)
         print("STDERR:\n", proc.stderr)
-    assert output_txt.exists(), "output.txt should be created by dummy biobeamer2.py"
+    assert output_txt.exists(), "output.txt should be created by dummy cli.py"
     assert output_txt.read_text() == "testdata"
     # Check logs for copy message
     log_dir = tmp_path / "cache"

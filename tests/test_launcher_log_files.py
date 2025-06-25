@@ -22,21 +22,24 @@ def test_launcher_log_files(tmp_path, monkeypatch):
     (src_path / test_file_name).write_text(test_file_content)
 
     # Create dummy BioBeamer repo with script and pyproject.toml
-    repo_dir = tmp_path / "biobeamer_repo" / "BioBeamer" / "src"
+    repo_dir = tmp_path / "biobeamer_repo" / "BioBeamer" / "src" / "biobeamer"
     repo_dir.mkdir(parents=True)
-    biobeamer2_py = repo_dir / "biobeamer2.py"
-    make_dummy_biobeamer2_py(biobeamer2_py, variant="log_files")
-    repo_root = repo_dir.parent
+    cli_py = repo_dir / "cli.py"
+    make_dummy_biobeamer2_py(cli_py, variant="log_files")
+    repo_root = repo_dir.parent.parent
     make_dummy_pyproject_toml(repo_root / "pyproject.toml")
     import subprocess
 
     subprocess.run(["git", "init", "--initial-branch=main"], cwd=repo_root)
     subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_root)
     subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_root)
+    # Create __init__.py for the package
+    (repo_dir / "__init__.py").write_text("")
     subprocess.run(["git", "add", "pyproject.toml"], cwd=repo_root)
-    subprocess.run(["git", "add", "src/biobeamer2.py"], cwd=repo_root)
+    subprocess.run(["git", "add", "src/biobeamer/cli.py"], cwd=repo_root)
+    subprocess.run(["git", "add", "src/biobeamer/__init__.py"], cwd=repo_root)
     subprocess.run(
-        ["git", "commit", "-m", "add dummy biobeamer2.py and pyproject.toml"],
+        ["git", "commit", "-m", "add dummy cli.py and pyproject.toml"],
         cwd=repo_root,
     )
     subprocess.run(["git", "tag", "6-project-toml"], cwd=repo_root)
