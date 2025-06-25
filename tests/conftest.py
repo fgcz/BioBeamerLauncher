@@ -3,7 +3,7 @@ import textwrap
 
 def make_dummy_biobeamer2_py(path, variant="log_files"):
     """
-    Create a dummy biobeamer2.py script at the given path.
+    Create a dummy cli.py script at the given path.
     variant: 'log_files' for log file creation, 'integration' for file copy simulation.
     """
     if variant == "log_files":
@@ -37,7 +37,7 @@ def make_dummy_biobeamer2_py(path, variant="log_files"):
                         f.write('Copied files log\\n')
                     sys.exit(0)
                 except Exception as e:
-                    print('Dummy biobeamer2.py failed:', e)
+                    print('Dummy cli.py failed:', e)
                     traceback.print_exc()
                     sys.exit(1)
 
@@ -88,10 +88,10 @@ def make_dummy_biobeamer2_py(path, variant="log_files"):
 
 def make_dummy_pyproject_toml(path):
     toml = """[project]
-name = "biobeamer2"
+name = "biobeamer"
 version = "0.0.1"
 [project.scripts]
-biobeamer2 = "biobeamer2:main"
+biobeamer = "biobeamer.cli:main"
 """
     with open(path, "w") as f:
         f.write(toml)

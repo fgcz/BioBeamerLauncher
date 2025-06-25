@@ -338,12 +338,12 @@ def ensure_biobeamer_venv(repo_path, version, logger):
     venv_scripts = os.path.join(venv_dir, "Scripts")
     if platform.system() == "Windows":
         venv_python = os.path.join(venv_scripts, "python.exe")
-        venv_biobeamer2 = os.path.join(venv_scripts, "biobeamer2.exe")
+        venv_biobeamer = os.path.join(venv_scripts, "biobeamer.exe")
     else:
         venv_python = os.path.join(venv_bin, "python")
-        venv_biobeamer2 = os.path.join(venv_bin, "biobeamer2")
+        venv_biobeamer = os.path.join(venv_bin, "biobeamer")
     uv_exe = find_uv_executable()
-    if not os.path.exists(venv_biobeamer2):
+    if not os.path.exists(venv_biobeamer):
         logger.info(
             f"Creating venv for BioBeamer version {version} at {venv_dir} using uv..."
         )
@@ -379,7 +379,7 @@ def ensure_biobeamer_venv(repo_path, version, logger):
 
 
 def run_biobeamer_process(repo_path, xml_path, cfg, log_dir, logger, version=None):
-    # Use venv and run biobeamer2 entry point
+    # Use venv and run biobeamer entry point
     if version is None:
         logger.error("BioBeamer version not specified for venv setup.")
         return 12
@@ -387,17 +387,17 @@ def run_biobeamer_process(repo_path, xml_path, cfg, log_dir, logger, version=Non
     if not venv_bin:
         return 13
     if platform.system() == "Windows":
-        biobeamer2_exe = os.path.join(venv_bin, "biobeamer2.exe")
+        biobeamer_exe = os.path.join(venv_bin, "biobeamer.exe")
     else:
-        biobeamer2_exe = os.path.join(venv_bin, "biobeamer2")
-    if not os.path.exists(biobeamer2_exe):
-        logger.error(f"BioBeamer entry point not found: {biobeamer2_exe}")
+        biobeamer_exe = os.path.join(venv_bin, "biobeamer")
+    if not os.path.exists(biobeamer_exe):
+        logger.error(f"BioBeamer entry point not found: {biobeamer_exe}")
         return 14
     biobeamer_log_file = os.path.join(
         log_dir, f"biobeamer_subprocess_{cfg['host_name']}.log"
     )
     cmd = [
-        biobeamer2_exe,
+        biobeamer_exe,
         "--xml",
         xml_path,
         "--hostname",
