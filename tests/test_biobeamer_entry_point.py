@@ -31,8 +31,6 @@ def test_biobeamer_entry_point_creation():
         # Try to find BioBeamer repo in common locations
         possible_paths = [
             "/srv/bfabriclocal/IdeaProjects/BioBeamer",  # Linux
-            "C:\\srv\\bfabriclocal\\IdeaProjects\\BioBeamer",  # Windows with same structure
-            "D:\\srv\\bfabriclocal\\IdeaProjects\\BioBeamer",  # Windows D: drive
             os.path.join(os.path.dirname(__file__), "..", "..", "BioBeamer"),  # Relative path
             os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "BioBeamer")),  # Absolute relative path
         ]
@@ -45,9 +43,44 @@ def test_biobeamer_entry_point_creation():
                 print(f"Found BioBeamer repo at: {path}")
                 break
         
-        # Skip if BioBeamer repo not available
+        # If BioBeamer repo not available, create a minimal test package
         if not biobeamer_repo:
-            pytest.skip("BioBeamer repository not available in expected locations")
+            print("BioBeamer repository not found, creating minimal test package...")
+            test_package_dir = os.path.join(temp_dir, "test-biobeamer")
+            os.makedirs(test_package_dir)
+            os.makedirs(os.path.join(test_package_dir, "src", "biobeamer"))
+            
+            # Create minimal pyproject.toml
+            pyproject_content = '''[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "biobeamer"
+version = "0.1.0"
+description = "Test package for entry point testing"
+
+[project.scripts]
+biobeamer = "biobeamer.cli:main"
+'''
+            with open(os.path.join(test_package_dir, "pyproject.toml"), "w") as f:
+                f.write(pyproject_content)
+            
+            # Create minimal CLI module
+            cli_content = '''def main():
+    print("usage: biobeamer [-h] command")
+    print("Test BioBeamer CLI")
+
+if __name__ == "__main__":
+    main()
+'''
+            with open(os.path.join(test_package_dir, "src", "biobeamer", "__init__.py"), "w") as f:
+                f.write("")
+            with open(os.path.join(test_package_dir, "src", "biobeamer", "cli.py"), "w") as f:
+                f.write(cli_content)
+            
+            biobeamer_repo = test_package_dir
+            print(f"Created test package at: {biobeamer_repo}")
         
         # Create virtual environment
         result = subprocess.run(
