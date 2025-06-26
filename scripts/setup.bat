@@ -4,15 +4,17 @@ setlocal
 REM Always run from project root (parent of this script's directory)
 cd /d "%~dp0\.."
 
-REM Find uv.exe: prefer .\scripts\uv.exe, else uv.exe from PATH
-if exist ".\scripts\uv.exe" (
+REM Find uv.exe: prefer .\uv.exe (release), else .\scripts\uv.exe (dev), else uv.exe from PATH
+if exist ".\uv.exe" (
+    set "UV_CMD=.\uv.exe"
+) else if exist ".\scripts\uv.exe" (
     set "UV_CMD=.\scripts\uv.exe"
 ) else (
     where uv.exe >nul 2>nul
     if %errorlevel%==0 (
         set "UV_CMD=uv.exe"
     ) else (
-        echo Error: 'uv.exe' not found in .\scripts\uv.exe or in PATH. Please install uv.
+        echo Error: 'uv.exe' not found in .\uv.exe, .\scripts\uv.exe, or in PATH. Please install uv.
         exit /b 127
     )
 )
