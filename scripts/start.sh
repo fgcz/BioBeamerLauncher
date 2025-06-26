@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 set -e
 
-# Always run from project root (parent of this script's directory) - same as setup.sh
-cd "$(dirname "$0")/.."
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Always run from project root (parent of script directory) - same as setup.sh
+cd "$(dirname "$SCRIPT_DIR")"
 
 source biobeamer-launcher-venv/bin/activate
-biobeamer-launcher --config config/launcher.ini
+# Config is in the release subdirectory
+RELEASE_DIR=$(basename "$SCRIPT_DIR")
+biobeamer-launcher --config "$RELEASE_DIR/config/launcher.ini"
 

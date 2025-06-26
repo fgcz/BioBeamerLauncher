@@ -92,11 +92,27 @@ def test_start_script_runs():
     if platform.system() == "Windows":
         pytest.skip("Skipping start.sh test on Windows")
     assert os.path.isdir(VENV_BIN), "Venv bin dir not found for start.sh test"
-    start_script = os.path.join(SCRIPTS_DIR, "start.sh")
-    assert os.path.exists(start_script), f"start.sh not found: {start_script}"
-    # Run the start.sh script from the project root so config/launcher.ini is found
+    
+    # Test the actual release package, not the development script
+    build_dir = os.path.join(PROJECT_ROOT, "build")
+    release_dir = os.path.join(build_dir, "release-linux")
+    start_script = os.path.join(release_dir, "start.sh")
+    
+    # Create release package if it doesn't exist
+    if not os.path.exists(start_script):
+        # Run make_release.py to create the release package
+        make_release_script = os.path.join(PROJECT_ROOT, "make_release.py")
+        result = subprocess.run(
+            [sys.executable, make_release_script], 
+            capture_output=True, text=True, cwd=PROJECT_ROOT
+        )
+        assert result.returncode == 0, f"Failed to create release package: {result.stderr}"
+    
+    assert os.path.exists(start_script), f"start.sh not found in release package: {start_script}"
+    
+    # Run the start.sh script from the release directory
     result = subprocess.run(
-        ["bash", start_script], capture_output=True, text=True, cwd=PROJECT_ROOT
+        [start_script], capture_output=True, text=True, cwd=release_dir
     )
     print(result.stdout)
     print(result.stderr)
@@ -108,11 +124,27 @@ def test_start_bat_runs():
     if platform.system() != "Windows":
         pytest.skip("start.bat test only runs on Windows")
     assert os.path.isdir(VENV_SCRIPTS), "Venv Scripts dir not found for start.bat test"
-    start_bat = os.path.join(SCRIPTS_DIR, "start.bat")
-    assert os.path.exists(start_bat), f"start.bat not found: {start_bat}"
-    # Run the start.bat script from the project root so config\launcher.ini is found
+    
+    # Test the actual release package, not the development script
+    build_dir = os.path.join(PROJECT_ROOT, "build")
+    release_dir = os.path.join(build_dir, "release-win")
+    start_bat = os.path.join(release_dir, "start.bat")
+    
+    # Create release package if it doesn't exist
+    if not os.path.exists(start_bat):
+        # Run make_release.py to create the release package
+        make_release_script = os.path.join(PROJECT_ROOT, "make_release.py")
+        result = subprocess.run(
+            [sys.executable, make_release_script], 
+            capture_output=True, text=True, cwd=PROJECT_ROOT
+        )
+        assert result.returncode == 0, f"Failed to create release package: {result.stderr}"
+    
+    assert os.path.exists(start_bat), f"start.bat not found in release package: {start_bat}"
+    
+    # Run the start.bat script from the release directory
     result = subprocess.run(
-        ["cmd.exe", "/c", start_bat], capture_output=True, text=True, cwd=PROJECT_ROOT
+        ["cmd.exe", "/c", start_bat], capture_output=True, text=True, cwd=release_dir
     )
     print(result.stdout)
     print(result.stderr)
