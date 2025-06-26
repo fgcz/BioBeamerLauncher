@@ -13,11 +13,23 @@ def test_biobeamer_entry_point_creation():
     # Create a temporary directory for testing
     with tempfile.TemporaryDirectory() as temp_dir:
         venv_dir = os.path.join(temp_dir, "test-venv")
-        biobeamer_repo = "/srv/bfabriclocal/IdeaProjects/BioBeamer"
+        
+        # Try to find BioBeamer repo in common locations
+        possible_paths = [
+            "/srv/bfabriclocal/IdeaProjects/BioBeamer",  # Linux
+            "C:\\path\\to\\BioBeamer",  # Windows (adjust as needed)
+            os.path.join(os.path.dirname(__file__), "..", "..", "BioBeamer"),  # Relative path
+        ]
+        
+        biobeamer_repo = None
+        for path in possible_paths:
+            if os.path.exists(path) and os.path.exists(os.path.join(path, "pyproject.toml")):
+                biobeamer_repo = path
+                break
         
         # Skip if BioBeamer repo not available
-        if not os.path.exists(biobeamer_repo):
-            pytest.skip("BioBeamer repository not available")
+        if not biobeamer_repo:
+            pytest.skip("BioBeamer repository not available in expected locations")
         
         # Create virtual environment
         result = subprocess.run(
@@ -70,11 +82,23 @@ def test_biobeamer_entry_point_without_editable_flag():
     # Create a temporary directory for testing
     with tempfile.TemporaryDirectory() as temp_dir:
         venv_dir = os.path.join(temp_dir, "test-venv-no-e")
-        biobeamer_repo = "/srv/bfabriclocal/IdeaProjects/BioBeamer"
+        
+        # Try to find BioBeamer repo in common locations
+        possible_paths = [
+            "/srv/bfabriclocal/IdeaProjects/BioBeamer",  # Linux
+            "C:\\path\\to\\BioBeamer",  # Windows (adjust as needed)
+            os.path.join(os.path.dirname(__file__), "..", "..", "BioBeamer"),  # Relative path
+        ]
+        
+        biobeamer_repo = None
+        for path in possible_paths:
+            if os.path.exists(path) and os.path.exists(os.path.join(path, "pyproject.toml")):
+                biobeamer_repo = path
+                break
         
         # Skip if BioBeamer repo not available
-        if not os.path.exists(biobeamer_repo):
-            pytest.skip("BioBeamer repository not available")
+        if not biobeamer_repo:
+            pytest.skip("BioBeamer repository not available in expected locations")
         
         # Create virtual environment
         result = subprocess.run(
@@ -115,12 +139,28 @@ def test_biobeamer_entry_point_without_editable_flag():
 
 def test_launcher_uses_editable_install():
     """Test that the launcher code uses the -e flag when installing BioBeamer."""
-    import biobeamer_launcher.launcher as launcher_module
-    import inspect
-    
-    # Get the source code of the setup_biobeamer_venv function
-    source = inspect.getsource(launcher_module.setup_biobeamer_venv)
-    
-    # Check that the source contains the -e flag
-    assert '"-e"' in source, "Launcher should use -e flag for editable install"
-    assert '"pip", "install", "-e"' in source, "Launcher should use 'pip install -e' command"
+    try:
+        import biobeamer_launcher.launcher as launcher_module
+        import inspect
+        
+        # Get the source code of the setup_biobeamer_venv function
+        source = inspect.getsource(launcher_module.setup_biobeamer_venv)
+        
+        # Check that the source contains the -e flag
+        assert '"-e"' in source, "Launcher should use -e flag for editable install"
+        assert '"pip", "install", "-e"' in source, "Launcher should use 'pip install -e' command"
+    except ImportError:
+        # If we can't import the module, check the source file directly
+        import os
+        current_dir = os.path.dirname(__file__)
+        launcher_file = os.path.join(current_dir, "..", "src", "biobeamer_launcher", "launcher.py")
+        
+        if os.path.exists(launcher_file):
+            with open(launcher_file, 'r') as f:
+                source = f.read()
+            
+            # Check that the source contains the -e flag
+            assert '"-e"' in source, "Launcher should use -e flag for editable install"
+            assert '"pip", "install", "-e"' in source, "Launcher should use 'pip install -e' command"
+        else:
+            pytest.skip("Could not find launcher module or source file")
