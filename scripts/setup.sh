@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
 set -e
 
-# Always run from project root (parent of this script's directory)
-cd "$(dirname "$0")/.."
+# Get the directory where this script is located (release root)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 
-# Find uv: prefer ./uv (release), else ./scripts/uv (dev), else uv from PATH
-if [ -x "./uv" ]; then
-    UV_CMD="./uv"
+# Find uv: prefer ./bin/uv (release), else ./scripts/uv (dev), else uv from PATH
+if [ -x "./bin/uv" ]; then
+    UV_CMD="./bin/uv"
 elif [ -x "./scripts/uv" ]; then
     UV_CMD="./scripts/uv"
 elif command -v uv >/dev/null 2>&1; then
     UV_CMD="uv"
 else
-    echo "Error: 'uv' not found in ./uv, ./scripts/uv, or in PATH. Please install uv."
+    echo "Error: 'uv' not found in ./bin/uv, ./scripts/uv, or in PATH. Please install uv."
     exit 127
 fi
 
