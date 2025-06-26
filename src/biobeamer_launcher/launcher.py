@@ -344,7 +344,7 @@ def setup_biobeamer_venv(repo_path, version, logger):
         # Install BioBeamer from repo_path
         logger.info(f"Installing BioBeamer into venv from {repo_path}...")
         result = subprocess.run(
-            [uv_exe, "pip", "install", repo_path],
+            [uv_exe, "pip", "install", "-e", repo_path],
             env={
                 **os.environ,
                 "VIRTUAL_ENV": venv_dir,

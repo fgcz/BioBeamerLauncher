@@ -1,9 +1,20 @@
 #!/usr/bin/env bash
 set -e
 
-# Get the directory where this script is located (release root)
+# Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+
+# Determine if we're in development mode (script in scripts/) or release mode (script in root)
+if [ "$(basename "$SCRIPT_DIR")" = "scripts" ]; then
+    # Development mode: go to project root (parent of scripts/)
+    PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+    cd "$PROJECT_ROOT"
+    echo "Development mode: Running from project root"
+else
+    # Release mode: stay in script directory (which is the release root)
+    cd "$SCRIPT_DIR"
+    echo "Release mode: Running from release directory"
+fi
 
 # Find uv: prefer ./bin/uv (release), else ./scripts/uv (dev), else uv from PATH
 if [ -x "./bin/uv" ]; then
