@@ -31,14 +31,18 @@ def test_biobeamer_entry_point_creation():
         # Try to find BioBeamer repo in common locations
         possible_paths = [
             "/srv/bfabriclocal/IdeaProjects/BioBeamer",  # Linux
-            "C:\\path\\to\\BioBeamer",  # Windows (adjust as needed)
+            "C:\\srv\\bfabriclocal\\IdeaProjects\\BioBeamer",  # Windows with same structure
+            "D:\\srv\\bfabriclocal\\IdeaProjects\\BioBeamer",  # Windows D: drive
             os.path.join(os.path.dirname(__file__), "..", "..", "BioBeamer"),  # Relative path
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "BioBeamer")),  # Absolute relative path
         ]
         
         biobeamer_repo = None
         for path in possible_paths:
+            print(f"Checking BioBeamer path: {path}")
             if os.path.exists(path) and os.path.exists(os.path.join(path, "pyproject.toml")):
                 biobeamer_repo = path
+                print(f"Found BioBeamer repo at: {path}")
                 break
         
         # Skip if BioBeamer repo not available
@@ -70,6 +74,21 @@ def test_biobeamer_entry_point_creation():
             },
             capture_output=True, text=True
         )
+        
+        # Print diagnostics for debugging
+        print(f"Install command: {' '.join([uv_cmd, 'pip', 'install', '-e', biobeamer_repo])}")
+        print(f"Install return code: {result.returncode}")
+        print(f"Install stdout: {result.stdout}")
+        print(f"Install stderr: {result.stderr}")
+        
+        # List contents of Scripts/bin directory for debugging
+        if platform.system() == "Windows":
+            scripts_dir = os.path.join(venv_dir, "Scripts")
+            print(f"Scripts directory contents: {os.listdir(scripts_dir) if os.path.exists(scripts_dir) else 'Not found'}")
+        else:
+            bin_dir = os.path.join(venv_dir, "bin")
+            print(f"Bin directory contents: {os.listdir(bin_dir) if os.path.exists(bin_dir) else 'Not found'}")
+        
         assert result.returncode == 0, f"Failed to install BioBeamer: {result.stderr}"
         
         # Check that the biobeamer executable was created
@@ -114,8 +133,10 @@ def test_biobeamer_entry_point_without_editable_flag():
         # Try to find BioBeamer repo in common locations
         possible_paths = [
             "/srv/bfabriclocal/IdeaProjects/BioBeamer",  # Linux
-            "C:\\path\\to\\BioBeamer",  # Windows (adjust as needed)
+            "C:\\srv\\bfabriclocal\\IdeaProjects\\BioBeamer",  # Windows with same structure
+            "D:\\srv\\bfabriclocal\\IdeaProjects\\BioBeamer",  # Windows D: drive
             os.path.join(os.path.dirname(__file__), "..", "..", "BioBeamer"),  # Relative path
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "BioBeamer")),  # Absolute relative path
         ]
         
         biobeamer_repo = None
