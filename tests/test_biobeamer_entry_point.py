@@ -7,7 +7,21 @@ import platform
 
 def test_biobeamer_entry_point_creation():
     """Test that BioBeamer installation creates the proper entry point executable."""
-    if not shutil.which("uv"):
+    # Find uv in multiple locations
+    uv_cmd = None
+    possible_uv_paths = [
+        "uv",  # System PATH
+        "uv.exe",  # Windows system PATH
+        os.path.join(os.path.dirname(__file__), "..", "scripts", "uv.exe"),  # Bundled Windows
+        os.path.join(os.path.dirname(__file__), "..", "scripts", "uv"),  # Bundled Linux
+    ]
+    
+    for uv_path in possible_uv_paths:
+        if shutil.which(uv_path) or os.path.exists(uv_path):
+            uv_cmd = uv_path
+            break
+    
+    if not uv_cmd:
         pytest.skip("uv not available for testing")
     
     # Create a temporary directory for testing
@@ -33,18 +47,18 @@ def test_biobeamer_entry_point_creation():
         
         # Create virtual environment
         result = subprocess.run(
-            ["uv", "venv", venv_dir],
+            [uv_cmd, "venv", venv_dir],
             capture_output=True, text=True
         )
         assert result.returncode == 0, f"Failed to create venv: {result.stderr}"
         
         # Install BioBeamer with -e flag (editable install)
         if platform.system() == "Windows":
-            uv_cmd = "uv.exe"
+            # Use the same uv_cmd we found
             venv_scripts = os.path.join(venv_dir, "Scripts")
             biobeamer_exe = os.path.join(venv_scripts, "biobeamer.exe")
         else:
-            uv_cmd = "uv"
+            # Use the same uv_cmd we found  
             venv_bin = os.path.join(venv_dir, "bin")
             biobeamer_exe = os.path.join(venv_bin, "biobeamer")
         
@@ -76,7 +90,21 @@ def test_biobeamer_entry_point_creation():
 
 def test_biobeamer_entry_point_without_editable_flag():
     """Test that BioBeamer installation WITHOUT -e flag fails to create entry point properly."""
-    if not shutil.which("uv"):
+    # Find uv in multiple locations
+    uv_cmd = None
+    possible_uv_paths = [
+        "uv",  # System PATH
+        "uv.exe",  # Windows system PATH
+        os.path.join(os.path.dirname(__file__), "..", "scripts", "uv.exe"),  # Bundled Windows
+        os.path.join(os.path.dirname(__file__), "..", "scripts", "uv"),  # Bundled Linux
+    ]
+    
+    for uv_path in possible_uv_paths:
+        if shutil.which(uv_path) or os.path.exists(uv_path):
+            uv_cmd = uv_path
+            break
+    
+    if not uv_cmd:
         pytest.skip("uv not available for testing")
     
     # Create a temporary directory for testing
@@ -102,18 +130,16 @@ def test_biobeamer_entry_point_without_editable_flag():
         
         # Create virtual environment
         result = subprocess.run(
-            ["uv", "venv", venv_dir],
+            [uv_cmd, "venv", venv_dir],
             capture_output=True, text=True
         )
         assert result.returncode == 0, f"Failed to create venv: {result.stderr}"
         
         # Install BioBeamer WITHOUT -e flag (regular install)
         if platform.system() == "Windows":
-            uv_cmd = "uv.exe"
             venv_scripts = os.path.join(venv_dir, "Scripts")
             biobeamer_exe = os.path.join(venv_scripts, "biobeamer.exe")
         else:
-            uv_cmd = "uv"
             venv_bin = os.path.join(venv_dir, "bin")
             biobeamer_exe = os.path.join(venv_bin, "biobeamer")
         
