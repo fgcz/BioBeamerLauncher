@@ -9,5 +9,5 @@ cd "$SCRIPT_DIR"
 export UV_PATH="$SCRIPT_DIR/bin/uv"
 
 source biobeamer-launcher-venv/bin/activate
-biobeamer-launcher --config "config/launcher.ini"
+biobeamer-launcher --config "config/launcher.ini" "$@"
 
