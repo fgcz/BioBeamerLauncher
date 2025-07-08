@@ -11,8 +11,6 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from typing import Optional
 
-import lxml.etree as LET
-
 
 def get_logger(
     name: str = "biobeamer_launcher",
@@ -64,6 +62,9 @@ def read_launcher_config(config_path: str, logger: logging.Logger) -> Optional[d
         "host_name": config.get("config", "host_name", fallback=None),
         "log_dir": config.get("config", "log_dir", fallback=None),
         "password": config.get("config", "password", fallback=""),
+        "sync_branches_to_remote": config.getboolean(
+            "config", "sync_branches_to_remote", fallback=False
+        ),
     }
     logger.debug(f"Config values loaded: {config_dict}")
     return config_dict
@@ -74,7 +75,8 @@ def print_launcher_config(cfg: dict, logger: logging.Logger) -> None:
         "BioBeamerLauncher configuration:\n"
         f"  BioBeamer repo URL: {cfg['biobeamer_repo_url']}\n"
         f"  Config file path: {cfg['xml_file_path']}\n"
-        f"  Host name: {cfg['host_name']}"
+        f"  Host name: {cfg['host_name']}\n"
+        f"  Sync branches to remote: {cfg.get('sync_branches_to_remote', False)}"
     )
     logger.info(msg)
 
@@ -178,7 +180,11 @@ def extract_biobeamer_version(
 
 
 def fetch_or_update_biobeamer_repo(
-    repo_url: str, version: str, cache_dir: str, logger: logging.Logger
+    repo_url: str,
+    version: str,
+    cache_dir: str,
+    logger: logging.Logger,
+    sync_branches_to_remote: bool = False,
 ) -> Optional[str]:
     """Clone or update the BioBeamer repo and checkout the specified version (tag or branch). Returns the repo path or None on failure."""
     if not repo_url or not version:
@@ -213,6 +219,23 @@ def fetch_or_update_biobeamer_repo(
             f"Failed to checkout version {version}: {result.stderr.decode().strip()}"
         )
         return None
+
+    # Optionally reset to ensure we have the latest remote version (important for branches)
+    if sync_branches_to_remote:
+        logger.info(
+            f"Resetting to origin/{version} to ensure latest remote version (sync_branches_to_remote=True)"
+        )
+        result = subprocess.run(
+            ["git", "-C", repo_path, "reset", "--hard", f"origin/{version}"],
+            capture_output=True,
+        )
+        if result.returncode != 0:
+            logger.warning(
+                f"Failed to reset to origin/{version}: {result.stderr.decode().strip()}"
+            )
+            # Don't return None here - checkout succeeded, reset is just optimization
+    else:
+        logger.info("Skipping reset to origin (sync_branches_to_remote=False)")
 
     return repo_path
 
@@ -274,7 +297,11 @@ def extract_and_log_version(host_entry, logger):
 def prepare_biobeamer_repo(cfg, version, logger):
     cache_dir = get_cache_dir()
     repo_path = fetch_or_update_biobeamer_repo(
-        cfg["biobeamer_repo_url"], version, cache_dir, logger=logger
+        cfg["biobeamer_repo_url"],
+        version,
+        cache_dir,
+        logger=logger,
+        sync_branches_to_remote=cfg.get("sync_branches_to_remote", False),
     )
     if not repo_path:
         logger.error("Failed to prepare BioBeamer repo.")
@@ -452,38 +479,42 @@ def print_debug_info(cfg, logger):
         logger.error("No BioBeamer version specified in host entry.")
         print("ERROR: No BioBeamer version specified in host entry.")
         return 3
-    
+
     # Actually set up the repo and venv to ensure paths are valid
     repo_path = prepare_biobeamer_repo(cfg, version, logger)
     if not repo_path:
         logger.error("Failed to prepare BioBeamer repo.")
         print("ERROR: Failed to prepare BioBeamer repo.")
         return 4
-    
+
     venv_bin = setup_biobeamer_venv(repo_path, version, logger)
     if not venv_bin:
         logger.error("Failed to set up BioBeamer venv.")
         print("ERROR: Failed to set up BioBeamer venv.")
         return 5
-    
+
     cache_dir = get_cache_dir()
     venv_dir = os.path.join(cache_dir, f"BioBeamer-venv-{version}")
     if platform.system() == "Windows":
         python_path = os.path.join(venv_dir, "Scripts", "python.exe")
     else:
         python_path = os.path.join(venv_dir, "bin", "python")
-    
+
     # Generate the exact biobeamer command arguments
     biobeamer_args = [
-        "--xml", xml_path,
-        "--hostname", cfg["host_name"],
-        "--log_dir", cfg.get("log_dir", get_cache_dir()),
-        "--password", cfg["password"]
+        "--xml",
+        xml_path,
+        "--hostname",
+        cfg["host_name"],
+        "--log_dir",
+        cfg.get("log_dir", get_cache_dir()),
+        "--password",
+        cfg["password"],
     ]
-    
-    print("\n" + "="*60)
+
+    print("\n" + "=" * 60)
     print("BIOBEAMER DEBUG INFO")
-    print("="*60)
+    print("=" * 60)
     print(f"BioBeamer repo path:     {repo_path}")
     print(f"BioBeamer venv path:     {venv_dir}")
     print(f"BioBeamer version:       {version}")
@@ -511,7 +542,7 @@ def print_debug_info(cfg, logger):
     print(f"   biobeamer {args_str}")
     print()
     print("See DEBUGGING.md for detailed instructions.")
-    print("="*60)
+    print("=" * 60)
     return 0
 
 
