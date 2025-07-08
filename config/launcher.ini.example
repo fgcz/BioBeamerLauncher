@@ -1,9 +1,22 @@
 [config]
-# URL of the BioBeamerConfig repository (can be a git repo or direct XML URL)
+# URL of the BioBeamer git repository
 biobeamer_repo_url = https://github.com/fgcz/BioBeamer.git
-# Path to the XML config file within the repo
+
+# Path to the XML config file (can be URL or local path)
 xml_file_path = https://github.com/fgcz/BioBeamerConfig/raw/refs/heads/main/xml/BioBeamerTest.xml
+
 # Hostname to select from the XML config
 host_name = testhost_only_simulate_copy
+
 # Directory for all logs (absolute or relative to launcher root)
 log_dir = log
+
+# Network drive password (optional, leave empty if not needed)
+# For UNC paths like \\server\share when using robocopy
+password = 
+
+# Whether to sync branches to their latest remote version (default: false)
+# When true: branches like 'test-branch' are updated to match remote
+# When false: uses existing local branch (might be stale)
+# Note: This setting only affects branches, not tags (tags are immutable)
+sync_branches_to_remote = false
