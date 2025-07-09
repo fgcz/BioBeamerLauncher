@@ -417,9 +417,10 @@ def run_biobeamer_process(repo_path, xml_path, cfg, log_dir, logger, version=Non
         cfg["host_name"],
         "--log_dir",
         log_dir,
-        "--password",
-        cfg["password"],
     ]
+    # Only add password if it's not empty
+    if cfg["password"]:
+        cmd.extend(["--password", cfg["password"]])
     logger.info(f"Running BioBeamer: {' '.join(cmd)}")
     try:
         with open(biobeamer_log_file, "w") as logf:
@@ -508,9 +509,10 @@ def print_debug_info(cfg, logger):
         cfg["host_name"],
         "--log_dir",
         cfg.get("log_dir", get_cache_dir()),
-        "--password",
-        cfg["password"],
     ]
+    # Only add password if it's not empty
+    if cfg["password"]:
+        biobeamer_args.extend(["--password", cfg["password"]])
 
     print("\n" + "=" * 60)
     print("BIOBEAMER DEBUG INFO")
