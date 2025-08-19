@@ -16,17 +16,33 @@ else
     echo "Release mode: Running from release directory"
 fi
 
-# Find uv: prefer ./bin/uv (release), else ./scripts/uv (dev), else uv from PATH
-if [ -x "./bin/uv" ]; then
-    UV_CMD="./bin/uv"
-elif [ -x "./scripts/uv" ]; then
-    UV_CMD="./scripts/uv"
-elif command -v uv >/dev/null 2>&1; then
-    UV_CMD="uv"
+
+# Detect OS
+OS=$(uname -s)
+
+if [ "$OS" = "Darwin" ]; then
+    # On macOS: prefer system uv
+    if command -v uv >/dev/null 2>&1; then
+        UV_CMD="uv"
+    else
+        echo "Error: 'uv' not found in PATH or ./scripts/uv. Please install uv."
+        exit 127
+    fi
 else
-    echo "Error: 'uv' not found in ./bin/uv, ./scripts/uv, or in PATH. Please install uv."
-    exit 127
+    # On Linux/other: prefer release binary
+    if [ -x "./bin/uv" ]; then
+        UV_CMD="./bin/uv"
+    elif [ -x "./scripts/uv" ]; then
+        UV_CMD="./scripts/uv"
+    elif command -v uv >/dev/null 2>&1; then
+        UV_CMD="uv"
+    else
+        echo "Error: 'uv' not found in ./bin/uv, ./scripts/uv, or in PATH. Please install uv."
+        exit 127
+    fi
 fi
+
+
 
 # Create a virtual environment with uv (downloads Python if needed)
 $UV_CMD venv biobeamer-launcher-venv
