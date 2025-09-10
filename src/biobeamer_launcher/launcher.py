@@ -95,7 +95,7 @@ def fetch_xml_config(xml_file_path: str, logger: logging.Logger) -> Optional[str
                 # Save a persistent copy in the cache
                 shutil.copy(tmp.name, cache_xml_path)
                 logger.info(f"Cached XML config at {cache_xml_path}")
-                return tmp.name
+                return cache_xml_path
         except Exception as e:
             logger.warning(f"Failed to fetch remote XML: {e}. Trying cached copy...")
             if os.path.exists(cache_xml_path):
