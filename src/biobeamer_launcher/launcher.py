@@ -65,9 +65,46 @@ def read_launcher_config(config_path: str, logger: logging.Logger) -> Optional[d
         "sync_branches_to_remote": config.getboolean(
             "config", "sync_branches_to_remote", fallback=False
         ),
+        # B-Fabric OAuth, for hosts using tool="tus". Non-secret values.
+        "bfabric_base_url": config.get("config", "bfabric_base_url", fallback=""),
+        "bfabric_client_id": config.get("config", "bfabric_client_id", fallback=""),
+        "bfabric_scope": config.get(
+            "config", "bfabric_scope", fallback="api:read api:write tus"
+        ),
+        # The secret. An already-set environment variable wins over launcher.ini so a host can
+        # keep it out of a world-readable file entirely.
+        "bfabric_client_secret": os.environ.get("BFABRIC_CLIENT_SECRET")
+        or config.get("config", "bfabric_client_secret", fallback=""),
     }
-    logger.debug(f"Config values loaded: {config_dict}")
+    logger.debug(f"Config values loaded: {redact_config(config_dict)}")
     return config_dict
+
+
+# Config keys whose values must never reach a log file, stdout, or a process argument list.
+SECRET_CONFIG_KEYS = ("password", "bfabric_client_secret")
+
+
+def redact_config(cfg: dict) -> dict:
+    """Copy of ``cfg`` with secret values masked, for logging."""
+    return {
+        k: ("<redacted>" if k in SECRET_CONFIG_KEYS and v else v) for k, v in cfg.items()
+    }
+
+
+def redact_command(cmd: list) -> list:
+    """Copy of ``cmd`` with the value following a secret-bearing flag masked, for logging."""
+    secret_flags = {"--password", "-p"}
+    out = []
+    mask_next = False
+    for part in cmd:
+        if mask_next:
+            out.append("<redacted>")
+            mask_next = False
+            continue
+        out.append(part)
+        if part in secret_flags:
+            mask_next = True
+    return out
 
 
 def print_launcher_config(cfg: dict, logger: logging.Logger) -> None:
@@ -78,6 +115,14 @@ def print_launcher_config(cfg: dict, logger: logging.Logger) -> None:
         f"  Host name: {cfg['host_name']}\n"
         f"  Sync branches to remote: {cfg.get('sync_branches_to_remote', False)}"
     )
+    if cfg.get("bfabric_client_id") or cfg.get("bfabric_base_url"):
+        msg += (
+            f"\n  B-Fabric base URL: {cfg.get('bfabric_base_url')}"
+            f"\n  B-Fabric client id: {cfg.get('bfabric_client_id')}"
+            f"\n  B-Fabric scope: {cfg.get('bfabric_scope')}"
+            f"\n  B-Fabric client secret: "
+            f"{'<set>' if cfg.get('bfabric_client_secret') else '<unset>'}"
+        )
     logger.info(msg)
 
 
@@ -339,11 +384,15 @@ def find_uv_executable():
     )
 
 
-def setup_biobeamer_venv(repo_path, version, logger):
+def setup_biobeamer_venv(repo_path, version, logger, extras=None):
     """
     Set up a virtual environment for the given BioBeamer version and install BioBeamer into it.
     Creates the venv if it doesn't exist, installs BioBeamer from the repo path.
     Returns the path to the venv's bin/Scripts directory.
+
+    :param extras: optional BioBeamer extras to install (e.g. ``["tus"]``). Note the venv is
+        only built when it does not already exist, so changing extras for an existing version
+        needs a new ``version`` (or a cleared cache) to take effect.
     """
     cache_dir = get_cache_dir()
     venv_dir = os.path.join(cache_dir, f"BioBeamer-venv-{version}")
@@ -368,14 +417,18 @@ def setup_biobeamer_venv(repo_path, version, logger):
         if result.returncode != 0:
             logger.error(f"Failed to create venv: {result.stderr.decode().strip()}")
             return None
-        # Install BioBeamer from repo_path
-        logger.info(f"Installing BioBeamer into venv from {repo_path}...")
+        # Install BioBeamer from repo_path, with any tool-specific extras (e.g. tus).
+        install_target = repo_path
+        if extras:
+            install_target = f"{repo_path}[{','.join(extras)}]"
+        logger.info(f"Installing BioBeamer into venv from {install_target}...")
+        path_sep = ";" if platform.system() == "Windows" else ":"
         result = subprocess.run(
-            [uv_exe, "pip", "install", "-e", repo_path],
+            [uv_exe, "pip", "install", "-e", install_target],
             env={
                 **os.environ,
                 "VIRTUAL_ENV": venv_dir,
-                "PATH": f"{venv_bin if platform.system() != 'Windows' else venv_scripts}:{os.environ.get('PATH','')}",
+                "PATH": f"{venv_bin if platform.system() != 'Windows' else venv_scripts}{path_sep}{os.environ.get('PATH','')}",
             },
             capture_output=True,
         )
@@ -391,12 +444,29 @@ def setup_biobeamer_venv(repo_path, version, logger):
     return venv_bin if platform.system() != "Windows" else venv_scripts
 
 
-def run_biobeamer_process(repo_path, xml_path, cfg, log_dir, logger, version=None):
+def extras_for_host(host_entry, logger=None):
+    """BioBeamer extras required by this host's transfer tool.
+
+    tool="tus" needs the bfabric transfer stack, which is an optional extra because it is a
+    large dependency tree that robocopy/scp/sftp hosts (some on very old Pythons) must not be
+    forced to install.
+    """
+    tool = (host_entry or {}).get("tool", "")
+    if tool == "tus":
+        if logger:
+            logger.info("Host uses tool=tus; installing BioBeamer with the 'tus' extra.")
+        return ["tus"]
+    return None
+
+
+def run_biobeamer_process(
+    repo_path, xml_path, cfg, log_dir, logger, version=None, extras=None
+):
     # Use venv and run biobeamer entry point
     if version is None:
         logger.error("BioBeamer version not specified for venv setup.")
         return 12
-    venv_bin = setup_biobeamer_venv(repo_path, version, logger)
+    venv_bin = setup_biobeamer_venv(repo_path, version, logger, extras=extras)
     if not venv_bin:
         return 13
     if platform.system() == "Windows":
@@ -421,11 +491,22 @@ def run_biobeamer_process(repo_path, xml_path, cfg, log_dir, logger, version=Non
     # Only add password if it's not empty
     if cfg["password"]:
         cmd.extend(["--password", cfg["password"]])
-    logger.info(f"Running BioBeamer: {' '.join(cmd)}")
+    # Non-secret tus settings may travel as arguments; the client secret must not (argv is
+    # world-readable via /proc and would land in the log line below), so it goes via env.
+    if cfg.get("bfabric_base_url"):
+        cmd.extend(["--bfabric-base-url", cfg["bfabric_base_url"]])
+    if cfg.get("bfabric_client_id"):
+        cmd.extend(["--bfabric-client-id", cfg["bfabric_client_id"]])
+    if cfg.get("bfabric_scope"):
+        cmd.extend(["--bfabric-scope", cfg["bfabric_scope"]])
+    logger.info(f"Running BioBeamer: {' '.join(redact_command(cmd))}")
+    child_env = dict(os.environ)
+    if cfg.get("bfabric_client_secret"):
+        child_env["BFABRIC_CLIENT_SECRET"] = cfg["bfabric_client_secret"]
     try:
         with open(biobeamer_log_file, "w") as logf:
             result = subprocess.run(
-                cmd, stdout=logf, stderr=subprocess.STDOUT, text=True
+                cmd, stdout=logf, stderr=subprocess.STDOUT, text=True, env=child_env
             )
         logger.info(f"BioBeamer subprocess log written to: {biobeamer_log_file}")
         if result.returncode != 0:
@@ -456,7 +537,13 @@ def run_launcher(cfg: dict, logger: logging.Logger, log_dir) -> int:
     if not repo_path:
         return 25
     return run_biobeamer_process(
-        repo_path, xml_path, cfg, log_dir, logger, version=version
+        repo_path,
+        xml_path,
+        cfg,
+        log_dir,
+        logger,
+        version=version,
+        extras=extras_for_host(host_entry, logger),
     )
 
 
@@ -488,7 +575,9 @@ def print_debug_info(cfg, logger):
         print("ERROR: Failed to prepare BioBeamer repo.")
         return 4
 
-    venv_bin = setup_biobeamer_venv(repo_path, version, logger)
+    venv_bin = setup_biobeamer_venv(
+        repo_path, version, logger, extras=extras_for_host(host_entry, logger)
+    )
     if not venv_bin:
         logger.error("Failed to set up BioBeamer venv.")
         print("ERROR: Failed to set up BioBeamer venv.")
@@ -513,6 +602,12 @@ def print_debug_info(cfg, logger):
     # Only add password if it's not empty
     if cfg["password"]:
         biobeamer_args.extend(["--password", cfg["password"]])
+    if cfg.get("bfabric_base_url"):
+        biobeamer_args.extend(["--bfabric-base-url", cfg["bfabric_base_url"]])
+    if cfg.get("bfabric_client_id"):
+        biobeamer_args.extend(["--bfabric-client-id", cfg["bfabric_client_id"]])
+    if cfg.get("bfabric_scope"):
+        biobeamer_args.extend(["--bfabric-scope", cfg["bfabric_scope"]])
 
     print("\n" + "=" * 60)
     print("BIOBEAMER DEBUG INFO")
@@ -526,8 +621,14 @@ def print_debug_info(cfg, logger):
     print()
     print("EXACT COMMAND ARGUMENTS (copy-paste ready):")
     print("=" * 50)
-    args_str = " ".join(f'"{arg}"' if " " in arg else arg for arg in biobeamer_args)
+    args_str = " ".join(
+        f'"{arg}"' if " " in arg else arg for arg in redact_command(biobeamer_args)
+    )
     print(f"{args_str}")
+    if cfg.get("bfabric_client_secret"):
+        print()
+        print("REQUIRED ENVIRONMENT (secret not shown; export it before running):")
+        print("   export BFABRIC_CLIENT_SECRET=...")
     print()
     print("DEBUGGING SETUP:")
     print("=" * 20)

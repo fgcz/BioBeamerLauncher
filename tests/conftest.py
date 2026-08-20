@@ -21,6 +21,9 @@ def make_dummy_biobeamer2_py(path, variant="log_files"):
                     parser.add_argument('--password')  # Accept password argument
                     parser.add_argument('--simulate_copy')  # Accept simulate_copy argument
                     parser.add_argument('--simulate_delete')  # Accept simulate_delete argument
+                    parser.add_argument('--bfabric-base-url')   # tus: B-Fabric base URL
+                    parser.add_argument('--bfabric-client-id')  # tus: OAuth client id
+                    parser.add_argument('--bfabric-scope')      # tus: OAuth scope
                     args = parser.parse_args()
                     # Simulate work: create all expected log files in log_dir
                     log_dir = args.log_dir or os.path.dirname(args.xml)

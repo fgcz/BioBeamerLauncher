@@ -20,3 +20,22 @@ password =
 # When false: uses existing local branch (might be stale)
 # Note: This setting only affects branches, not tags (tags are immutable)
 sync_branches_to_remote = false
+# --- B-Fabric / TUS upload (only needed for hosts with tool="tus") -------------
+# TUS uploads over HTTP(S) into B-Fabric and creates the workunit at upload time,
+# so nothing has to be mounted. It authenticates as an OAuth service user.
+
+# B-Fabric instance URL
+# bfabric_base_url = https://bfabric.example.com/bfabric
+
+# OAuth client id of the instrument's service user
+# bfabric_client_id = svc-instrument-uploader
+
+# OAuth scope. MUST include 'tus' -- the default B-Fabric scope does not grant it.
+# bfabric_scope = api:read api:write tus
+
+# OAuth client secret. Prefer setting the BFABRIC_CLIENT_SECRET environment
+# variable instead of putting it here: an already-set env var takes precedence,
+# and this file is typically world-readable on the instrument PC.
+# The launcher passes the secret to BioBeamer through the environment, never as a
+# command-line argument, so it does not appear in logs or in the process list.
+# bfabric_client_secret =
